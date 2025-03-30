@@ -1,13 +1,7 @@
 // #![allow(unused_imports, unused_variables)]
-use std::cmp::min;
-use std::num::ParseIntError;
-use std::str::FromStr;
-
-use chrono::NaiveDateTime;
-use chrono::offset::LocalResult;
-use chrono::{DateTime, Local, NaiveDate, NaiveTime, TimeZone};
-use rrule::{Frequency, Unvalidated};
-use rrule::{RRule, Tz};
+use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, offset::LocalResult};
+use rrule::{Frequency, RRule, Tz, Unvalidated};
+use std::{cmp::min, num::ParseIntError, str::FromStr};
 
 #[allow(unused_variables)]
 pub struct Event {
@@ -31,13 +25,13 @@ pub struct Session {
 }
 
 impl FromStr for Session {
-    type Err = SessionFromStrError;
+    type Err = SessionError;
 
-    fn from_str(str: &str) -> Result<Session, SessionFromStrError> {
+    fn from_str(str: &str) -> Result<Session, SessionError> {
         let mut parts = str.splitn(2, "|");
         let mut range_parts = parts.next().expect("First").splitn(2, "-");
         let start_str = range_parts.next().expect("First");
-        let end_str_suffix = range_parts.next().ok_or(SessionFromStrError::MissingEnd)?;
+        let end_str_suffix = range_parts.next().ok_or(SessionError::MissingEnd)?;
         let mut end_str = start_str.to_string();
         end_str.replace_range(start_str.len() - end_str_suffix.len().., end_str_suffix);
         let start = Session::local_date_time(start_str)?;
@@ -50,7 +44,7 @@ impl FromStr for Session {
                     println!("{}", part);
                     Session::repeat(part).and_then(|r| {
                         r.validate(start.with_timezone(&Tz::UTC))
-                            .map_err(SessionFromStrError::InvalidRule)
+                            .map_err(SessionError::InvalidRule)
                     })
                 })
                 .transpose()?,
@@ -59,26 +53,26 @@ impl FromStr for Session {
 }
 
 impl Session {
-    fn local_date_time(string: &str) -> Result<DateTime<Local>, SessionFromStrError> {
+    fn local_date_time(string: &str) -> Result<DateTime<Local>, SessionError> {
         let mut parts = string.splitn(2, "_");
         let date = NaiveDate::parse_from_str(parts.next().expect("First"), "%y/%m/%d")
-            .map_err(SessionFromStrError::Format)?;
+            .map_err(SessionError::Format)?;
         let time = parts
             .next()
             .map(|str| {
                 NaiveTime::parse_from_str(str, &"%H:%M:%S"[..min(str.len(), 8)])
-                    .map_err(SessionFromStrError::Format)
+                    .map_err(SessionError::Format)
             })
             .transpose()?
             .unwrap_or_default();
         match Local.from_local_datetime(&NaiveDateTime::new(date, time)) {
             LocalResult::Single(single) => Ok(single),
-            LocalResult::Ambiguous(_, _) => Err(SessionFromStrError::AmbiguousLocalTime),
-            LocalResult::None => Err(SessionFromStrError::InvalidLocalTime),
+            LocalResult::Ambiguous(_, _) => Err(SessionError::AmbiguousLocalTime),
+            LocalResult::None => Err(SessionError::InvalidLocalTime),
         }
     }
 
-    fn repeat(str: &str) -> Result<RRule<Unvalidated>, SessionFromStrError> {
+    fn repeat(str: &str) -> Result<RRule<Unvalidated>, SessionError> {
         let mut split = str.splitn(2, "-");
         let main = split.next().expect("First");
         let until = split
@@ -87,21 +81,16 @@ impl Session {
             .transpose()?;
         let mut parts = main.split("_");
         let mut rule = RRule::new(
-            Frequency::from_str(parts.next().expect("First"))
-                .map_err(SessionFromStrError::Frequency)?,
+            Frequency::from_str(parts.next().expect("First")).map_err(SessionError::Frequency)?,
         );
         if let Some(until) = until {
             rule = rule.until(until.with_timezone(&Tz::UTC));
         }
         while let Some(part) = parts.next() {
             if let Some(prefix) = part.strip_prefix('%') {
-                rule = rule.interval(
-                    prefix
-                        .parse::<u16>()
-                        .map_err(SessionFromStrError::Interval)?,
-                );
+                rule = rule.interval(prefix.parse::<u16>().map_err(SessionError::Interval)?);
             } else if let Some(prefix) = part.strip_prefix("#") {
-                rule = rule.count(prefix.parse::<u32>().map_err(SessionFromStrError::Count)?)
+                rule = rule.count(prefix.parse::<u32>().map_err(SessionError::Count)?)
             }
         }
         Ok(rule)
@@ -109,7 +98,7 @@ impl Session {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum SessionFromStrError {
+pub enum SessionError {
     MissingEnd,
     Count(ParseIntError),
     Interval(ParseIntError),
