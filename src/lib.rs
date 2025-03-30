@@ -41,7 +41,6 @@ impl FromStr for Session {
             repeat: parts
                 .next()
                 .map(|part| {
-                    println!("{}", part);
                     Session::repeat(part).and_then(|r| {
                         r.validate(start.with_timezone(&Tz::UTC))
                             .map_err(SessionError::InvalidRule)
