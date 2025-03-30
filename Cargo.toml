@@ -1,0 +1,10 @@
+[package]
+name = "task-tree"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.40"
+ics = "0.5.8"
+regex = "1.11.1"
+rrule = "0.13.0"
