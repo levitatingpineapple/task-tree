@@ -1,29 +1,18 @@
-#![allow(unused_imports, unused_variables)]
+// #![allow(unused_imports, unused_variables)]
 use std::cmp::min;
-use std::collections::HashSet;
-use std::fmt::Debug;
-use std::num::{ParseIntError, Saturating};
-use std::ops::IndexMut;
+use std::num::ParseIntError;
 use std::str::FromStr;
-use std::string;
 
-use chrono::format::ParseErrorKind;
+use chrono::NaiveDateTime;
 use chrono::offset::LocalResult;
-use chrono::{
-    DateTime, Duration, Local, NaiveDate, NaiveTime, ParseError, ParseResult, TimeZone, Utc,
-};
-use chrono::{Datelike, NaiveDateTime};
-use ics::ICalendar;
-use ics::properties::*;
-use rrule::{Frequency, Unvalidated, Validated};
+use chrono::{DateTime, Local, NaiveDate, NaiveTime, TimeZone};
+use rrule::{Frequency, Unvalidated};
 use rrule::{RRule, Tz};
 
-// Event
-
-#[derive(Debug)]
-struct Event {
-    title: String,
-    sessions: Vec<Session>,
+#[allow(unused_variables)]
+pub struct Event {
+    pub title: String,
+    pub sessions: Vec<Session>,
 }
 
 impl FromStr for Event {
@@ -34,27 +23,23 @@ impl FromStr for Event {
     }
 }
 
-// Session
-
 #[derive(Debug, PartialEq)]
 pub struct Session {
-    start: DateTime<Local>,
-    end: DateTime<Local>,
-    repeat: Option<RRule>,
+    pub start: DateTime<Local>,
+    pub end: DateTime<Local>,
+    pub repeat: Option<RRule>,
 }
 
 impl FromStr for Session {
     type Err = SessionFromStrError;
 
     fn from_str(str: &str) -> Result<Session, SessionFromStrError> {
-        // Split
         let mut parts = str.splitn(2, "|");
         let mut range_parts = parts.next().expect("First").splitn(2, "-");
         let start_str = range_parts.next().expect("First");
         let end_str_suffix = range_parts.next().ok_or(SessionFromStrError::MissingEnd)?;
         let mut end_str = start_str.to_string();
         end_str.replace_range(start_str.len() - end_str_suffix.len().., end_str_suffix);
-        // Parse
         let start = Session::local_date_time(start_str)?;
         Ok(Session {
             start,
@@ -137,14 +122,12 @@ pub enum SessionFromStrError {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{NaiveDate, NaiveTime, SubsecRound};
-
     use super::*;
 
     #[test]
     fn session_from_str() {
         let start = Local.with_ymd_and_hms(2025, 03, 30, 21, 55, 0).unwrap();
-        let repeat = assert_eq!(
+        assert_eq!(
             Session::from_str("25/03/30_21:55-23:11|daily"),
             Ok(Session {
                 start: start,
@@ -158,7 +141,7 @@ mod tests {
         );
     }
 
-    // #[test]
+    #[test]
     fn session_ndt() {
         assert_eq!(
             Session::local_date_time("25/03/30_23:55:45"),
@@ -188,7 +171,7 @@ mod tests {
         assert!(Session::local_date_time("25/03").is_err());
     }
 
-    // #[test]
+    #[test]
     fn session_repeat() {
         assert_eq!(Session::repeat("daily"), Ok(RRule::new(Frequency::Daily)));
 
