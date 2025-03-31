@@ -1,21 +1,6 @@
-// #![allow(unused_imports, unused_variables)]
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, offset::LocalResult};
 use rrule::{Frequency, RRule, Tz, Unvalidated};
 use std::{cmp::min, num::ParseIntError, str::FromStr};
-
-#[allow(unused_variables)]
-pub struct Event {
-    pub title: String,
-    pub sessions: Vec<Session>,
-}
-
-impl FromStr for Event {
-    type Err = String;
-
-    fn from_str(_: &str) -> Result<Self, Self::Err> {
-        todo!()
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
@@ -24,36 +9,9 @@ pub struct Session {
     pub repeat: Option<RRule>,
 }
 
-impl FromStr for Session {
-    type Err = SessionError;
-
-    fn from_str(str: &str) -> Result<Session, SessionError> {
-        let mut parts = str.splitn(2, "|");
-        let mut range_parts = parts.next().expect("First").splitn(2, "-");
-        let start_str = range_parts.next().expect("First");
-        let end_str_suffix = range_parts.next().ok_or(SessionError::MissingEnd)?;
-        let mut end_str = start_str.to_string();
-        end_str.replace_range(start_str.len() - end_str_suffix.len().., end_str_suffix);
-        let start = Session::local_date_time(start_str)?;
-        Ok(Session {
-            start,
-            end: Session::local_date_time(&end_str)?,
-            repeat: parts
-                .next()
-                .map(|part| {
-                    Session::repeat(part).and_then(|r| {
-                        r.validate(start.with_timezone(&Tz::UTC))
-                            .map_err(SessionError::InvalidRule)
-                    })
-                })
-                .transpose()?,
-        })
-    }
-}
-
 impl Session {
-    fn local_date_time(string: &str) -> Result<DateTime<Local>, SessionError> {
-        let mut parts = string.splitn(2, "_");
+    fn local_date_time(str: &str) -> Result<DateTime<Local>, SessionError> {
+        let mut parts = str.splitn(2, "_");
         let date = NaiveDate::parse_from_str(parts.next().expect("First"), "%y/%m/%d")
             .map_err(SessionError::Format)?;
         let time = parts
@@ -93,6 +51,31 @@ impl Session {
             }
         }
         Ok(rule)
+    }
+}
+
+impl FromStr for Session {
+    type Err = SessionError;
+
+    fn from_str(str: &str) -> Result<Session, SessionError> {
+        let mut parts = str.splitn(2, "|");
+        let mut range_parts = parts.next().expect("First").splitn(2, "-");
+        let start_str = range_parts.next().expect("First");
+        let end_str_suffix = range_parts.next().ok_or(SessionError::MissingEnd)?;
+        let mut end_str = start_str.to_string();
+        end_str.replace_range(start_str.len() - end_str_suffix.len().., end_str_suffix);
+        let start = Session::local_date_time(start_str)?;
+        let end = Session::local_date_time(&end_str)?;
+        let repeat = parts
+            .next()
+            .map(|part| {
+                Session::repeat(part).and_then(|r| {
+                    r.validate(start.with_timezone(&Tz::UTC))
+                        .map_err(SessionError::InvalidRule)
+                })
+            })
+            .transpose()?;
+        Ok(Session { start, end, repeat })
     }
 }
 
