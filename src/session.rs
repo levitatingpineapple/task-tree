@@ -6,7 +6,7 @@ use std::{cmp::min, num::ParseIntError, str::FromStr};
 pub struct Session {
     pub start: DateTime<Local>,
     pub end: DateTime<Local>,
-    pub repeat: Option<RRule>,
+    pub rrule: Option<RRule>,
 }
 
 impl Session {
@@ -75,7 +75,11 @@ impl FromStr for Session {
                 })
             })
             .transpose()?;
-        Ok(Session { start, end, repeat })
+        Ok(Session {
+            start,
+            end,
+            rrule: repeat,
+        })
     }
 }
 
@@ -103,7 +107,7 @@ mod tests {
             Ok(Session {
                 start: start,
                 end: Local.with_ymd_and_hms(2025, 03, 30, 23, 11, 0).unwrap(),
-                repeat: Some(
+                rrule: Some(
                     RRule::new(Frequency::Daily)
                         .validate(start.with_timezone(&Tz::UTC))
                         .unwrap()
