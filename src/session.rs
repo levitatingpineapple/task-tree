@@ -9,6 +9,16 @@ pub struct Session {
     pub rrule: Option<RRule>,
 }
 
+// TODO: Support all day events
+// local_date_time should be able to decode
+// - date without months `XX/01/01`
+// - time without minutes`XX:00:00`
+#[allow(dead_code)]
+enum SessionRange {
+    AllDay((NaiveDate, NaiveDate)),
+    Time((NaiveDateTime, NaiveDateTime)),
+}
+
 impl Session {
     fn local_date_time(str: &str) -> Result<DateTime<Local>, SessionError> {
         let mut parts = str.splitn(2, "_");

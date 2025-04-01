@@ -14,13 +14,14 @@ use std::{
 #[derive(Debug, PartialEq)]
 pub struct Task {
     done: Option<bool>,
-    summary: String,
+    text: String,
     sessions: Vec<Session>,
+    parent: Option<usize>,
 }
 
 impl Task {
     /// Creates task from markdown list item
-    pub fn new(item: &ListItem) -> Result<Task, TaskErr> {
+    pub fn new(item: &ListItem, parent: Option<usize>) -> Result<Task, TaskErr> {
         let node = item.children.get(0).ok_or(TaskErr::EmptyListItem)?;
         let paragraph = if let Node::Paragraph(paragraph) = node {
             Ok(paragraph)
@@ -29,8 +30,9 @@ impl Task {
         }?;
         let mut event = Task {
             done: item.checked,
-            summary: String::new(),
+            text: String::new(),
             sessions: Vec::new(),
+            parent,
         };
         for child in &paragraph.children {
             if let Node::InlineCode(inline_code) = child {
@@ -38,24 +40,26 @@ impl Task {
                     .sessions
                     .push(Session::from_str(&inline_code.value).map_err(TaskErr::Session)?);
             } else {
-                event.summary.push_str(&child.to_string());
+                event.text.push_str(&child.to_string());
             }
         }
-        if let Some(pos) = event.summary.rfind(|c| c != ' ') {
-            event.summary.truncate(pos + 1);
+        if let Some(pos) = event.text.rfind(|c| c != ' ') {
+            event.text.truncate(pos + 1);
         }
         Ok(event)
     }
 
-    pub fn events(&self) -> Vec<Event> {
+    pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
         let now = zulu(Local::now());
+        let summary = self.summary(tasks);
+
         self.sessions
             .iter()
             .enumerate()
             .map(|(i, session)| {
-                let id = self.event_id(i);
+                let id = Task::event_id(&summary, i);
                 let mut event = Event::new(format!("{:x}", id), now.clone());
-                event.push(Summary::new(&self.summary));
+                event.push(Summary::new(summary.clone()));
                 event.push(DtStart::new(zulu(session.start)));
                 event.push(DtEnd::new(zulu(session.end)));
                 if let Some(rrule) = &session.rrule {
@@ -66,12 +70,28 @@ impl Task {
             .collect()
     }
 
+    // TODO: Consider that the additional items could go into description
+    fn summary(&self, tasks: &Vec<Task>) -> String {
+        let mut summaries = Vec::new();
+        summaries.push(self.text.clone());
+        let mut parent_idx = self.parent;
+        while let Some(idx) = parent_idx {
+            if let Some(parent_task) = tasks.get(idx) {
+                summaries.push(parent_task.text.clone());
+                parent_idx = parent_task.parent;
+            } else {
+                break;
+            }
+        }
+        summaries.join(". ")
+    }
+
     /// Each session is uniquely identified by hash of
     /// the task summary and it's index
-    fn event_id(&self, session_index: usize) -> u64 {
+    fn event_id(full_summary: &str, session: usize) -> u64 {
         let mut hasher = DefaultHasher::new();
-        self.summary.hash(&mut hasher);
-        session_index.hash(&mut hasher);
+        full_summary.hash(&mut hasher);
+        session.hash(&mut hasher);
         hasher.finish()
     }
 }
@@ -93,7 +113,6 @@ pub enum TaskErr {
 
 #[cfg(test)]
 mod tests {
-
     use markdown::{ParseOptions, to_mdast};
 
     use super::*;
@@ -121,23 +140,13 @@ mod tests {
         let li = list_item("- [ ] My _special_ task `25/03/28_12:30-14:00` `25/02/03_21:45-22:30`");
         let task = Task {
             done: Some(false),
-            summary: "My special task".to_string(),
+            text: "My special task".to_string(),
             sessions: vec![
                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
             ],
+            parent: None,
         };
-        assert_eq!(Task::new(&li), Ok(task));
-    }
-
-    #[test]
-    fn foo() {
-        let li = list_item(
-            "- [ ] My _special_ task `25/03/28_12:30-14:00` `25/02/03_18:45-21:30|daily_#5`",
-        );
-        let task = Task::new(&li).unwrap();
-        for event in task.events() {
-            println!("{}", event);
-        }
+        assert_eq!(Task::new(&li, None), Ok(task));
     }
 }

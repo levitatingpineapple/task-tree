@@ -32,12 +32,12 @@ fn main() -> io::Result<()> {
 
     // Find ListItem nodes and create Task structs
     let mut tasks = Vec::new();
-    collect_tasks(&ast, &mut tasks);
+    collect_tasks(&ast, &mut tasks, None);
 
     // Create calendar
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     for task in &tasks {
-        for event in task.events() {
+        for event in task.events(&tasks) {
             calendar.add_event(event);
         }
     }
@@ -47,19 +47,23 @@ fn main() -> io::Result<()> {
 
 /// Recursively traverses markdown AST,
 /// extracts `ListItem` nodes and converts them to tasks
-fn collect_tasks(node: &Node, tasks: &mut Vec<Task>) {
-    if let Node::ListItem(list_item) = node {
-        match Task::new(list_item) {
-            Ok(task) => tasks.push(task),
-            Err(err) => {
-                eprintln!("Error creating task: {:?}", err);
-                process::exit(1);
+fn collect_tasks(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) {
+    /// Recursive call
+    fn recurse(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) {
+        if let Some(children) = node.children() {
+            for child in children {
+                collect_tasks(child, tasks, parent);
             }
         }
     }
-    if let Some(children) = node.children() {
-        for child in children {
-            collect_tasks(child, tasks);
-        }
+    if let Node::ListItem(list_item) = node {
+        let task = Task::new(list_item, parent).unwrap_or_else(|err| {
+            eprintln!("Error creating task: {:?}", err);
+            process::exit(1);
+        });
+        tasks.push(task);
+        recurse(node, tasks, Some(tasks.len() - 1));
+    } else {
+        recurse(node, tasks, parent);
     }
 }
