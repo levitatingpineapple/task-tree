@@ -2,7 +2,7 @@ use crate::session::{Session, SessionError};
 use chrono::{DateTime, Local, Utc};
 use ics::{
     Event,
-    properties::{DtEnd, DtStart, RRule, Summary},
+    properties::{DtEnd, DtStart, RRule, Sequence, Summary},
 };
 use markdown::mdast::{ListItem, Node};
 use std::{
@@ -50,24 +50,32 @@ impl Task {
     }
 
     pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
-        let now = zulu(Local::now());
+        let now = Local::now();
+        let zulu_now = zulu(now);
         let summary = self.summary(tasks);
-
-        self.sessions
+        let test: Vec<Event> = self
+            .sessions
             .iter()
             .enumerate()
             .map(|(i, session)| {
                 let id = Task::event_id(&summary, i);
-                let mut event = Event::new(format!("{:x}", id), now.clone());
+                let mut event = Event::new(format!("{:x}", id), zulu_now.clone());
                 event.push(Summary::new(summary.clone()));
                 event.push(DtStart::new(zulu(session.start)));
                 event.push(DtEnd::new(zulu(session.end)));
+                // Apple calendar will only update even _once_
+                // even when `DTSTAMP` and `LAST-MODIFIED` are incremented
+                // setting sequence number to current unix timestamp
+                // allows updating events wihout retaining any state
+                event.push(Sequence::new(now.timestamp().to_string()));
                 if let Some(rrule) = &session.rrule {
                     event.push(RRule::new(rrule.to_string()));
                 }
                 event
             })
-            .collect()
+            .collect();
+
+        return test;
     }
 
     // TODO: Consider that the additional items could go into description
