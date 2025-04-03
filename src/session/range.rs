@@ -1,11 +1,27 @@
 use super::timestamp::{Ts, TsErr};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, Utc};
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Range {
-    AllDay(std::ops::Range<NaiveDate>),
-    Timed(std::ops::Range<NaiveDateTime>),
+#[derive(Debug, PartialEq)]
+pub struct Range {
+    pub start: Ts,
+    pub end: Ts,
+}
+
+impl Range {
+    fn all_day(start: NaiveDate, end: NaiveDate) -> Self {
+        Self {
+            start: Ts::Date(start),
+            end: Ts::Date(end),
+        }
+    }
+
+    fn timed(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+        Self {
+            start: Ts::Timed(start),
+            end: Ts::Timed(end),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -31,18 +47,18 @@ impl FromStr for Range {
             Ts::Date(sd) => match end {
                 Ts::Date(ed) => {
                     if sd <= ed {
-                        Ok(Range::AllDay(sd..ed))
+                        Ok(Range::all_day(sd, ed))
                     } else {
                         Err(RangeErr::EndBeforeStart)
                     }
                 }
-                Ts::DateTime(_) => Err(RangeErr::BoundMismatch),
+                Ts::Timed(_) => Err(RangeErr::BoundMismatch),
             },
-            Ts::DateTime(sdt) => match end {
+            Ts::Timed(sdt) => match end {
                 Ts::Date(_) => Err(RangeErr::BoundMismatch),
-                Ts::DateTime(edt) => {
+                Ts::Timed(edt) => {
                     if sdt <= edt {
-                        Ok(Range::Timed(sdt..edt))
+                        Ok(Range::timed(sdt, edt))
                     } else {
                         Err(RangeErr::EndBeforeStart)
                     }
@@ -55,7 +71,7 @@ impl FromStr for Range {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+    use chrono::{NaiveDate, TimeZone};
 
     #[test]
     fn range_from_str_all_day_full() {
@@ -63,17 +79,17 @@ mod tests {
         let end = date(2025, 1, 2);
         assert_eq!(
             "24/12/31-25/01/02".parse::<Range>(),
-            Ok(Range::AllDay(start..end))
+            Ok(Range::all_day(start, end))
         );
     }
 
     #[test]
     fn range_from_str_timed_full() {
-        let start = NaiveDateTime::new(date(2024, 12, 31), time(10, 30, 0));
-        let end = NaiveDateTime::new(date(2025, 1, 2), time(15, 45, 0));
+        let start = Utc.with_ymd_and_hms(2024, 12, 31, 10, 30, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2025, 1, 2, 15, 45, 0).unwrap();
         assert_eq!(
             "24/12/31_10:30-25/01/02_15:45".parse::<Range>(),
-            Ok(Range::Timed(start..end))
+            Ok(Range::timed(start, end))
         );
     }
 
@@ -83,27 +99,27 @@ mod tests {
         let end = date(2024, 12, 8);
         assert_eq!(
             "24/12/02-08".parse::<Range>(),
-            Ok(Range::AllDay(start..end))
+            Ok(Range::all_day(start, end))
         );
     }
 
     #[test]
     fn range_from_str_timed_partial() {
-        let start = NaiveDateTime::new(date(2024, 10, 2), time(10, 30, 0));
-        let end = NaiveDateTime::new(date(2024, 10, 2), time(15, 45, 0));
+        let start = Utc.with_ymd_and_hms(2024, 10, 2, 10, 30, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 10, 2, 15, 45, 0).unwrap();
         assert_eq!(
             "24/10/02_10:30-15:45".parse::<Range>(),
-            Ok(Range::Timed(start..end))
+            Ok(Range::timed(start, end))
         );
     }
 
     #[test]
     fn range_from_str_timed_hours() {
-        let start = NaiveDateTime::new(date(2024, 10, 2), time(10, 0, 0));
-        let end = NaiveDateTime::new(date(2024, 10, 2), time(15, 0, 0));
+        let start = Utc.with_ymd_and_hms(2024, 10, 2, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 10, 2, 15, 0, 0).unwrap();
         assert_eq!(
             "24/10/02_10-15".parse::<Range>(),
-            Ok(Range::Timed(start..end))
+            Ok(Range::timed(start, end))
         );
     }
 
@@ -125,10 +141,6 @@ mod tests {
             "24/10/02-01_23:55".parse::<Range>(),
             Err(RangeErr::BoundMismatch)
         );
-    }
-
-    fn time(h: u32, m: u32, s: u32) -> NaiveTime {
-        NaiveTime::from_hms_opt(h, m, s).unwrap()
     }
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {

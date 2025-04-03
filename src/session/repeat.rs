@@ -1,8 +1,5 @@
-use super::{
-    range::Range,
-    timestamp::{Ts, TsErr},
-};
-use rrule::{Frequency, RRule, RRuleError, Tz, Unvalidated};
+use super::timestamp::{Ts, TsErr};
+use rrule::{Frequency, RRule, RRuleError, Unvalidated};
 use std::{num::ParseIntError, str::FromStr};
 
 #[derive(Debug, PartialEq)]
@@ -21,11 +18,7 @@ pub enum RepeatErr {
 
 impl Repeat {
     /// Validates the repeat rule for given start timestamp
-    pub fn validated_in(self, range: &Range) -> Result<RRule, RepeatErr> {
-        let start = match range {
-            Range::AllDay(range) => Ts::Date(range.start),
-            Range::Timed(range) => Ts::DateTime(range.start),
-        };
+    pub fn validated_in(self, start: &Ts) -> Result<RRule, RepeatErr> {
         self.rule
             .validate(start.as_utc().map_err(RepeatErr::Ts)?)
             .map_err(RepeatErr::Validation)

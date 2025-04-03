@@ -5,9 +5,8 @@ use std::{num::ParseIntError, str::FromStr};
 #[derive(Debug, PartialEq)]
 pub enum Ts {
     Date(NaiveDate),
-    DateTime(NaiveDateTime),
+    Timed(DateTime<Utc>),
 }
-
 #[derive(Debug, PartialEq)]
 pub enum TsErr {
     NotNumber(ParseIntError),
@@ -25,17 +24,17 @@ impl Ts {
                 let midnight = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
                 Utc.from_utc_datetime(&nd.and_time(midnight))
             }
-            Ts::DateTime(ndt) => as_local_to_utc(ndt)?,
+            Ts::Timed(ndt) => ndt.clone(),
         }
         .with_timezone(&Tz::UTC))
     }
 
-    /// Expressed as DTSTART and DTEND properties
-    pub fn as_dt(&self) -> Result<String, TsErr> {
-        Ok(match self {
+    /// Expressed as ics DT... properties
+    pub fn as_dt(&self) -> String {
+        match self {
             Ts::Date(nd) => format!("VALUE=DATE:{}", nd.format("%Y%m%d")),
-            Ts::DateTime(ndt) => as_local_to_utc(ndt)?.format("%Y%m%dT%H%M%SZ").to_string(),
-        })
+            Ts::Timed(ndt) => super::formatted(ndt.clone()),
+        }
     }
 }
 
@@ -46,7 +45,9 @@ impl FromStr for Ts {
         let mut parts = str.splitn(2, "_");
         let date = parse_date(parts.next().expect("first"))?;
         Ok(if let Some(time_str) = parts.next() {
-            Ts::DateTime(NaiveDateTime::new(date, parse_time(time_str)?))
+            let ndt = NaiveDateTime::new(date, parse_time(time_str)?);
+            let utc = local_utc(&ndt)?;
+            Ts::Timed(utc)
         } else {
             Ts::Date(date)
         })
@@ -55,7 +56,7 @@ impl FromStr for Ts {
 
 /// Interprets `NaiveDateTime` as `Utc`.
 /// Throws error if time is ambiguous or invalid due to winter/summer time switch
-fn as_local_to_utc(ndt: &NaiveDateTime) -> Result<DateTime<Utc>, TsErr> {
+fn local_utc(ndt: &NaiveDateTime) -> Result<DateTime<Utc>, TsErr> {
     match Utc.from_local_datetime(ndt) {
         LocalResult::Single(single) => Ok(single),
         LocalResult::Ambiguous(_, _) => Err(TsErr::AmbiguousInTimezone),
@@ -193,13 +194,16 @@ mod tests {
         let expected_date = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
         let expected_time = NaiveTime::from_hms_opt(14, 30, 45).unwrap();
         let expected_dt = NaiveDateTime::new(expected_date, expected_time);
-        assert_eq!("24/12/31_14:30:45".parse(), Ok(Ts::DateTime(expected_dt)));
+        assert_eq!(
+            "24/12/31_14:30:45".parse(),
+            Ok(Ts::Timed(local_utc(&expected_dt).unwrap()))
+        );
     }
 
     #[test]
     fn dt_as_dt_date() {
         let date = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
         let dt = Ts::Date(date);
-        assert_eq!(dt.as_dt().unwrap(), "VALUE=DATE:20241231");
+        assert_eq!(dt.as_dt(), "VALUE=DATE:20241231");
     }
 }

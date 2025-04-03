@@ -1,5 +1,5 @@
-use crate::session::{Session, SessionErr};
-use chrono::{DateTime, Local, Utc};
+use crate::session::{self, Session, SessionErr};
+use chrono::Utc;
 use ics::{
     Event,
     properties::{DtEnd, DtStart, RRule, Sequence, Summary},
@@ -50,33 +50,32 @@ impl Task {
     }
 
     pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
-        // let now = Local::now();
-        // let zulu_now = zulu(now);
-        // let summary = self.summary(tasks);
-        // let test: Vec<Event> = self
-        //     .sessions
-        //     .iter()
-        //     .enumerate()
-        //     .map(|(i, session)| {
-        //         let id = Task::event_id(&summary, i);
-        //         let mut event = Event::new(format!("{:x}", id), zulu_now.clone());
-        //         event.push(Summary::new(summary.clone()));
-        //         event.push(DtStart::new(zulu(session.start)));
-        //         event.push(DtEnd::new(zulu(session.end)));
-        //         // Apple calendar will only update even _once_
-        //         // even when `DTSTAMP` and `LAST-MODIFIED` are incremented
-        //         // setting sequence number to current unix timestamp
-        //         // allows updating events wihout retaining any state
-        //         event.push(Sequence::new(now.timestamp().to_string()));
-        //         if let Some(rrule) = &session.rrule {
-        //             event.push(RRule::new(rrule.to_string()));
-        //         }
-        //         event
-        //     })
-        //     .collect();
+        let now = Utc::now();
+        let dtstamp = session::formatted(now);
+        let summary = self.summary(tasks);
+        let test: Vec<Event> = self
+            .sessions
+            .iter()
+            .enumerate()
+            .map(|(i, session)| {
+                let id = Task::event_id(&summary, i);
+                let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
+                event.push(Summary::new(summary.clone()));
+                event.push(DtStart::new(session.range.start.as_dt()));
+                event.push(DtEnd::new(session.range.end.as_dt()));
+                // Apple calendar will only update even _once_
+                // even when `DTSTAMP` and `LAST-MODIFIED` are incremented
+                // setting sequence number to current unix timestamp
+                // allows updating events wihout retaining any state
+                event.push(Sequence::new(now.timestamp().to_string()));
+                if let Some(rrule) = &session.rrule {
+                    event.push(RRule::new(rrule.to_string()));
+                }
+                event
+            })
+            .collect();
 
-        // return test;
-        todo!()
+        return test;
     }
 
     // TODO: Consider that the additional items could go into description
@@ -103,14 +102,6 @@ impl Task {
         session.hash(&mut hasher);
         hasher.finish()
     }
-}
-
-/// Formats local time to ICS zulu time UTC+0
-fn zulu(local: DateTime<Local>) -> String {
-    local
-        .with_timezone(&Utc)
-        .format("%Y%m%dT%H%M%SZ")
-        .to_string()
 }
 
 #[derive(Debug, PartialEq)]

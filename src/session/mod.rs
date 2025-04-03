@@ -4,14 +4,15 @@ mod timestamp;
 
 use std::str::FromStr;
 
+use chrono::{DateTime, Utc};
 use range::{Range, RangeErr};
 use repeat::{Repeat, RepeatErr};
-use timestamp::Ts;
+use rrule::RRule;
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
-    range: Range,
-    repeat: Option<Repeat>,
+    pub range: Range,
+    pub rrule: Option<RRule>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -20,22 +21,23 @@ pub enum SessionErr {
     Repeat(RepeatErr),
 }
 
-impl Session {
-    fn start(&self) -> String {
-        todo!()
-    }
-}
-
 impl FromStr for Session {
     type Err = SessionErr;
 
     fn from_str(str: &str) -> Result<Session, SessionErr> {
         let mut parts = str.splitn(2, "|");
         let range = Range::from_str(parts.next().expect("first")).map_err(SessionErr::Range)?;
-        let repeat = parts
+        let rrule = parts
             .next()
             .map(|s| Repeat::from_str(s).map_err(SessionErr::Repeat))
+            .transpose()?
+            .map(|r| r.validated_in(&range.start).map_err(SessionErr::Repeat))
             .transpose()?;
-        todo!()
+        Ok(Session { range, rrule })
     }
+}
+
+/// Formats UTC DateTime to ICS ZULU format - trailing Z
+pub fn formatted(dt: DateTime<Utc>) -> String {
+    dt.format("%Y%m%dT%H%M%SZ").to_string()
 }
