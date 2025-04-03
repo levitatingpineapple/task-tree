@@ -2,7 +2,7 @@ use crate::session::{self, Session, SessionErr};
 use chrono::Utc;
 use ics::{
     Event,
-    properties::{RRule, Sequence, Summary},
+    properties::{Description, RRule, Sequence, Summary},
 };
 use markdown::mdast::{ListItem, Node};
 use std::{
@@ -52,15 +52,16 @@ impl Task {
     pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
         let now = Utc::now();
         let dtstamp = session::formatted(now);
-        let summary = self.summary(tasks);
+        let parents = self.parents(tasks);
         let test: Vec<Event> = self
             .sessions
             .iter()
             .enumerate()
             .map(|(i, session)| {
-                let id = Task::event_id(&summary, i);
+                let id = self.event_id(&parents, i);
                 let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
-                event.push(Summary::new(summary.clone()));
+                event.push(Summary::new(self.text.clone()));
+                event.push(Description::new(parents.clone()));
                 event.push(session.dt_start());
                 event.push(session.dt_end());
                 // Apple calendar will only update even _once_
@@ -79,9 +80,8 @@ impl Task {
     }
 
     // TODO: Consider that the additional items could go into description
-    fn summary(&self, tasks: &Vec<Task>) -> String {
+    fn parents(&self, tasks: &Vec<Task>) -> String {
         let mut summaries = Vec::new();
-        summaries.push(self.text.clone());
         let mut parent_idx = self.parent;
         while let Some(idx) = parent_idx {
             if let Some(parent_task) = tasks.get(idx) {
@@ -96,9 +96,10 @@ impl Task {
 
     /// Each session is uniquely identified by hash of
     /// the task summary and it's index
-    fn event_id(full_summary: &str, session: usize) -> u64 {
+    fn event_id(&self, parents: &str, session: usize) -> u64 {
         let mut hasher = DefaultHasher::new();
-        full_summary.hash(&mut hasher);
+        self.text.hash(&mut hasher);
+        parents.hash(&mut hasher);
         session.hash(&mut hasher);
         hasher.finish()
     }
