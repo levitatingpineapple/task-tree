@@ -91,7 +91,8 @@ impl Task {
                 break;
             }
         }
-        summaries.join(". ")
+        summaries.reverse();
+        summaries.join("\\n")
     }
 
     /// Each session is uniquely identified by hash of
