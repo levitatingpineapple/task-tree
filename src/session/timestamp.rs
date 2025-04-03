@@ -28,14 +28,6 @@ impl Ts {
         }
         .with_timezone(&Tz::UTC))
     }
-
-    /// Expressed as ics DT... properties
-    pub fn as_dt(&self) -> String {
-        match self {
-            Ts::Date(nd) => format!("VALUE=DATE:{}", nd.format("%Y%m%d")),
-            Ts::Timed(ndt) => super::formatted(ndt.clone()),
-        }
-    }
 }
 
 impl FromStr for Ts {
@@ -198,12 +190,5 @@ mod tests {
             "24/12/31_14:30:45".parse(),
             Ok(Ts::Timed(local_utc(&expected_dt).unwrap()))
         );
-    }
-
-    #[test]
-    fn dt_as_dt_date() {
-        let date = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
-        let dt = Ts::Date(date);
-        assert_eq!(dt.as_dt(), "VALUE=DATE:20241231");
     }
 }

@@ -2,7 +2,7 @@ use crate::session::{self, Session, SessionErr};
 use chrono::Utc;
 use ics::{
     Event,
-    properties::{DtEnd, DtStart, RRule, Sequence, Summary},
+    properties::{RRule, Sequence, Summary},
 };
 use markdown::mdast::{ListItem, Node};
 use std::{
@@ -61,8 +61,8 @@ impl Task {
                 let id = Task::event_id(&summary, i);
                 let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
                 event.push(Summary::new(summary.clone()));
-                event.push(DtStart::new(session.range.start.as_dt()));
-                event.push(DtEnd::new(session.range.end.as_dt()));
+                event.push(session.dt_start());
+                event.push(session.dt_end());
                 // Apple calendar will only update even _once_
                 // even when `DTSTAMP` and `LAST-MODIFIED` are incremented
                 // setting sequence number to current unix timestamp
@@ -111,42 +111,42 @@ pub enum TaskErr {
     Session(SessionErr),
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use markdown::{ParseOptions, to_mdast};
+#[cfg(test)]
+mod tests {
+    use markdown::{ParseOptions, to_mdast};
 
-//     use super::*;
+    use super::*;
 
-//     fn list_item(str: &str) -> ListItem {
-//         if let Node::ListItem(item) = to_mdast(str, &ParseOptions::gfm())
-//             .unwrap()
-//             .children()
-//             .unwrap()
-//             .get(0)
-//             .unwrap()
-//             .children()
-//             .unwrap()
-//             .get(0)
-//             .unwrap()
-//         {
-//             item.to_owned()
-//         } else {
-//             unreachable!("Expect valid list item in markdown");
-//         }
-//     }
+    fn list_item(str: &str) -> ListItem {
+        if let Node::ListItem(item) = to_mdast(str, &ParseOptions::gfm())
+            .unwrap()
+            .children()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .children()
+            .unwrap()
+            .get(0)
+            .unwrap()
+        {
+            item.to_owned()
+        } else {
+            unreachable!("Expect valid list item in markdown");
+        }
+    }
 
-//     #[test]
-//     fn event_new() {
-//         let li = list_item("- [ ] My _special_ task `25/03/28_12:30-14:00` `25/02/03_21:45-22:30`");
-//         let task = Task {
-//             done: Some(false),
-//             text: "My special task".to_string(),
-//             sessions: vec![
-//                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
-//                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
-//             ],
-//             parent: None,
-//         };
-//         assert_eq!(Task::new(&li, None), Ok(task));
-//     }
-// }
+    #[test]
+    fn event_new() {
+        let li = list_item("- [ ] My _special_ task `25/03/28_12:30-14:00` `25/02/03_21:45-22:30`");
+        let task = Task {
+            done: Some(false),
+            text: "My special task".to_string(),
+            sessions: vec![
+                Session::from_str("25/03/28_12:30-14:00").unwrap(),
+                Session::from_str("25/02/03_21:45-22:30").unwrap(),
+            ],
+            parent: None,
+        };
+        assert_eq!(Task::new(&li, None), Ok(task));
+    }
+}

@@ -5,6 +5,10 @@ mod timestamp;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use ics::{
+    parameters,
+    properties::{DtEnd, DtStart},
+};
 use range::{Range, RangeErr};
 use repeat::{Repeat, RepeatErr};
 use rrule::RRule;
@@ -19,6 +23,30 @@ pub struct Session {
 pub enum SessionErr {
     Range(RangeErr),
     Repeat(RepeatErr),
+}
+
+impl Session {
+    pub fn dt_start<'a>(&self) -> DtStart<'a> {
+        match self.range.start {
+            timestamp::Ts::Date(nd) => {
+                let mut dt = DtStart::new(nd.format("%Y%m%d").to_string());
+                dt.append(parameters!("VALUE" => "DATE"));
+                dt
+            }
+            timestamp::Ts::Timed(dt) => DtStart::new(formatted(dt.clone())),
+        }
+    }
+
+    pub fn dt_end<'a>(&self) -> DtEnd<'a> {
+        match self.range.end {
+            timestamp::Ts::Date(nd) => {
+                let mut dt = DtEnd::new(nd.format("%Y%m%d").to_string());
+                dt.append(parameters!("VALUE" => "DATE"));
+                dt
+            }
+            timestamp::Ts::Timed(dt) => DtEnd::new(formatted(dt.clone())),
+        }
+    }
 }
 
 impl FromStr for Session {
