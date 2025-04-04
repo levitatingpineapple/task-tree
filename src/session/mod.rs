@@ -4,7 +4,7 @@ mod timestamp;
 
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use ics::{
     parameters,
     properties::{DtEnd, DtStart},
@@ -66,6 +66,6 @@ impl FromStr for Session {
 }
 
 /// Formats UTC DateTime to ICS ZULU format - trailing Z
-pub fn formatted(dt: DateTime<Utc>) -> String {
-    dt.format("%Y%m%dT%H%M%SZ").to_string()
+pub fn formatted(dt: DateTime<Local>) -> String {
+    dt.with_timezone(&Utc).format("%Y%m%dT%H%M%SZ").to_string()
 }

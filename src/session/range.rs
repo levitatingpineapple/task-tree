@@ -1,5 +1,5 @@
 use super::timestamp::{Ts, TsErr};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Local, NaiveDate};
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
@@ -16,7 +16,7 @@ impl Range {
         }
     }
 
-    fn timed(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
+    fn timed(start: DateTime<Local>, end: DateTime<Local>) -> Self {
         Self {
             start: Ts::Timed(start),
             end: Ts::Timed(end),
@@ -85,8 +85,8 @@ mod tests {
 
     #[test]
     fn range_from_str_timed_full() {
-        let start = Utc.with_ymd_and_hms(2024, 12, 31, 10, 30, 0).unwrap();
-        let end = Utc.with_ymd_and_hms(2025, 1, 2, 15, 45, 0).unwrap();
+        let start = Local.with_ymd_and_hms(2024, 12, 31, 10, 30, 0).unwrap();
+        let end = Local.with_ymd_and_hms(2025, 1, 2, 15, 45, 0).unwrap();
         assert_eq!(
             "24/12/31_10:30-25/01/02_15:45".parse::<Range>(),
             Ok(Range::timed(start, end))
@@ -105,8 +105,8 @@ mod tests {
 
     #[test]
     fn range_from_str_timed_partial() {
-        let start = Utc.with_ymd_and_hms(2024, 10, 2, 10, 30, 0).unwrap();
-        let end = Utc.with_ymd_and_hms(2024, 10, 2, 15, 45, 0).unwrap();
+        let start = Local.with_ymd_and_hms(2024, 10, 2, 10, 30, 0).unwrap();
+        let end = Local.with_ymd_and_hms(2024, 10, 2, 15, 45, 0).unwrap();
         assert_eq!(
             "24/10/02_10:30-15:45".parse::<Range>(),
             Ok(Range::timed(start, end))
@@ -115,8 +115,8 @@ mod tests {
 
     #[test]
     fn range_from_str_timed_hours() {
-        let start = Utc.with_ymd_and_hms(2024, 10, 2, 10, 0, 0).unwrap();
-        let end = Utc.with_ymd_and_hms(2024, 10, 2, 15, 0, 0).unwrap();
+        let start = Local.with_ymd_and_hms(2024, 10, 2, 10, 0, 0).unwrap();
+        let end = Local.with_ymd_and_hms(2024, 10, 2, 15, 0, 0).unwrap();
         assert_eq!(
             "24/10/02_10-15".parse::<Range>(),
             Ok(Range::timed(start, end))

@@ -41,7 +41,7 @@ fn main() -> io::Result<()> {
             calendar.add_event(event);
         }
     }
-    calendar.save_file("todo.ics")?;
+    print!("{}", calendar.to_string());
     Ok(())
 }
 

@@ -1,11 +1,13 @@
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, offset::LocalResult};
+use chrono::{
+    DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc, offset::LocalResult,
+};
 use rrule::Tz;
 use std::{num::ParseIntError, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum Ts {
     Date(NaiveDate),
-    Timed(DateTime<Utc>),
+    Timed(DateTime<Local>),
 }
 #[derive(Debug, PartialEq)]
 pub enum TsErr {
@@ -23,10 +25,10 @@ impl Ts {
             Ts::Date(nd) => {
                 let midnight = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
                 Utc.from_utc_datetime(&nd.and_time(midnight))
+                    .with_timezone(&Tz::UTC)
             }
-            Ts::Timed(ndt) => ndt.clone(),
-        }
-        .with_timezone(&Tz::UTC))
+            Ts::Timed(ndt) => ndt.clone().with_timezone(&Tz::UTC),
+        })
     }
 }
 
@@ -48,8 +50,8 @@ impl FromStr for Ts {
 
 /// Interprets `NaiveDateTime` as `Utc`.
 /// Throws error if time is ambiguous or invalid due to winter/summer time switch
-fn local_utc(ndt: &NaiveDateTime) -> Result<DateTime<Utc>, TsErr> {
-    match Utc.from_local_datetime(ndt) {
+fn local_utc(ndt: &NaiveDateTime) -> Result<DateTime<Local>, TsErr> {
+    match Local.from_local_datetime(ndt) {
         LocalResult::Single(single) => Ok(single),
         LocalResult::Ambiguous(_, _) => Err(TsErr::AmbiguousInTimezone),
         LocalResult::None => Err(TsErr::InvalidInTimezone),

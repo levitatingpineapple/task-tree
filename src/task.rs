@@ -1,5 +1,5 @@
 use crate::session::{self, Session, SessionErr};
-use chrono::Utc;
+use chrono::Local;
 use ics::{
     Event,
     properties::{Description, RRule, Sequence, Summary},
@@ -50,7 +50,7 @@ impl Task {
     }
 
     pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
-        let now = Utc::now();
+        let now = Local::now();
         let dtstamp = session::formatted(now);
         let parents = self.parents(tasks);
         let test: Vec<Event> = self
