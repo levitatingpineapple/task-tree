@@ -1,28 +1,30 @@
 use crate::task::Task;
+use dirs::home_dir;
 use ics::ICalendar;
 use markdown::{ParseOptions, mdast::Node, to_mdast};
 use std::{
-    fs,
-    io::{self, Read},
+    fs::{create_dir_all, read_to_string},
     path::Path,
     process,
 };
 
-pub fn export_from(path: &Path) -> io::Result<()> {
-    let mut file = fs::File::open(path)?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
-    let ast = to_mdast(&content, &ParseOptions::gfm()).expect("Failed to parse markdown");
+pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
+    let md_syntax_tree =
+        to_mdast(&read_to_string(md_path)?, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let mut tasks = Vec::new();
-    collect_tasks(&ast, &mut tasks, None);
+    collect_tasks(&md_syntax_tree, &mut tasks, None);
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     for task in &tasks {
         for event in task.events(&tasks) {
             calendar.add_event(event);
         }
     }
-    calendar.save_file(path)?;
-    open::that(path)?;
+    let ics_path = home_dir()
+        .ok_or(ExportErr::MissingHome)?
+        .join(".cache/task-tree/todo.ics");
+    let _ = create_dir_all(ics_path.parent().expect("parent"));
+    calendar.save_file(&ics_path)?;
+    open::that(&ics_path).unwrap();
     Ok(())
 }
 
@@ -48,4 +50,16 @@ fn collect_tasks(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) {
         // Recursive call keeping the existing parent
         recurse(node, tasks, parent);
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExportErr {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Invalid Markdown: {0}")]
+    Markdown(markdown::message::Message),
+
+    #[error("Missing home directory")]
+    MissingHome,
 }

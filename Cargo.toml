@@ -5,8 +5,12 @@ edition = "2024"
 
 [dependencies]
 chrono = "0.4.40"
+dirs = "6.0.0"
 ics = "0.5.8"
 markdown = "1.0.0-alpha.23"
 open = "5.3.2"
 rrule = "0.13.0"
+serde_json = "1.0"
+thiserror = "2.0.12"
+tokio = { version = "1.0", features = ["full"] }
 tower-lsp = "0.20.0"
