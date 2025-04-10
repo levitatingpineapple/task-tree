@@ -106,10 +106,13 @@ impl Task {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum TaskErr {
+    #[error("Nothing in the list")]
     EmptyListItem,
+    #[error("List should contain a paragraph")]
     MissingParagraph,
+    #[error("Session error: {0}")]
     Session(SessionErr),
 }
 

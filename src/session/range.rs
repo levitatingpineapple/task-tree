@@ -24,11 +24,15 @@ impl Range {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum RangeErr {
+    #[error("Missing end date/time")]
     MissingEndBound,
-    Timestamp(TsErr),
+    #[error("Timestamp: {0}")]
+    Timestamp(#[from] TsErr),
+    #[error("Mismatch between start and end times")]
     BoundMismatch,
+    #[error("End before start")]
     EndBeforeStart,
 }
 
@@ -41,8 +45,8 @@ impl FromStr for Range {
         let end_str_suffix = parts.next().ok_or(RangeErr::MissingEndBound)?;
         let mut end_str = start_str.to_string();
         end_str.replace_range(start_str.len() - end_str_suffix.len().., end_str_suffix);
-        let start = Ts::from_str(start_str).map_err(RangeErr::Timestamp)?;
-        let end = Ts::from_str(&end_str).map_err(RangeErr::Timestamp)?;
+        let start = Ts::from_str(start_str)?;
+        let end = Ts::from_str(&end_str)?;
         match start {
             Ts::Date(sd) => match end {
                 Ts::Date(ed) => {

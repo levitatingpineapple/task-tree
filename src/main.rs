@@ -9,7 +9,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-const EXPORT_ICS: &str = "Export to Calendar";
+const EXPORT_ICS: &str = "tasktree.export";
 
 #[tokio::main]
 async fn main() {

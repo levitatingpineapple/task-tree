@@ -19,10 +19,12 @@ pub struct Session {
     pub rrule: Option<RRule>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum SessionErr {
-    Range(RangeErr),
-    Repeat(RepeatErr),
+    #[error("Range: {0}")]
+    Range(#[from] RangeErr),
+    #[error("Repeat: {0}")]
+    Repeat(#[from] RepeatErr),
 }
 
 impl Session {
@@ -54,12 +56,12 @@ impl FromStr for Session {
 
     fn from_str(str: &str) -> Result<Session, SessionErr> {
         let mut parts = str.splitn(2, "|");
-        let range = Range::from_str(parts.next().expect("first")).map_err(SessionErr::Range)?;
+        let range = Range::from_str(parts.next().expect("first"))?;
         let rrule = parts
             .next()
-            .map(|s| Repeat::from_str(s).map_err(SessionErr::Repeat))
+            .map(|s| Repeat::from_str(s))
             .transpose()?
-            .map(|r| r.validated_in(&range.start).map_err(SessionErr::Repeat))
+            .map(|r| r.validated_in(&range.start))
             .transpose()?;
         Ok(Session { range, rrule })
     }

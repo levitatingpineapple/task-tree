@@ -9,12 +9,17 @@ pub enum Ts {
     Date(NaiveDate),
     Timed(DateTime<Local>),
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum TsErr {
-    NotNumber(ParseIntError),
+    #[error("Not a number: {0}")]
+    NotNumber(#[from] ParseIntError),
+    #[error("Invalid time")]
     InvalidDate,
+    #[error("Invalid date")]
     InvalidTime,
+    #[error("Ambiguous in timezone")]
     AmbiguousInTimezone,
+    #[error("Invalid in timezone")]
     InvalidInTimezone,
 }
 

@@ -5,14 +5,13 @@ use markdown::{ParseOptions, mdast::Node, to_mdast};
 use std::{
     fs::{create_dir_all, read_to_string},
     path::Path,
-    process,
 };
 
 pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let md_syntax_tree =
         to_mdast(&read_to_string(md_path)?, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let mut tasks = Vec::new();
-    collect_tasks(&md_syntax_tree, &mut tasks, None);
+    collect_tasks(&md_syntax_tree, &mut tasks, None)?;
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     for task in &tasks {
         for event in task.events(&tasks) {
@@ -30,26 +29,29 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 
 /// Recursively traverses markdown AST,
 /// extracts `ListItem` nodes and converts them to tasks
-fn collect_tasks(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) {
-    fn recurse(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) {
+fn collect_tasks(
+    node: &Node,
+    tasks: &mut Vec<Task>,
+    parent: Option<usize>,
+) -> Result<(), ExportErr> {
+    fn recurse(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) -> Result<(), ExportErr> {
         if let Some(children) = node.children() {
             for child in children {
-                collect_tasks(child, tasks, parent);
+                collect_tasks(child, tasks, parent)?;
             }
         }
+        Ok(())
     }
     if let Node::ListItem(list_item) = node {
-        let task = Task::new(list_item, parent).unwrap_or_else(|err| {
-            eprintln!("Error creating task: {:?}", err);
-            process::exit(1);
-        });
+        let task = Task::new(list_item, parent)?;
         tasks.push(task);
         // Recursive call with last appended task as parent
-        recurse(node, tasks, Some(tasks.len() - 1));
+        recurse(node, tasks, Some(tasks.len() - 1))?;
     } else {
         // Recursive call keeping the existing parent
-        recurse(node, tasks, parent);
+        recurse(node, tasks, parent)?;
     }
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -62,4 +64,7 @@ pub enum ExportErr {
 
     #[error("Missing home directory")]
     MissingHome,
+
+    #[error("Task error: {0}")]
+    Task(#[from] crate::task::TaskErr),
 }
