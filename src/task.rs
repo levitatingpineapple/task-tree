@@ -64,7 +64,7 @@ impl Task {
                 event.push(Description::new(parents.clone()));
                 event.push(session.dt_start());
                 event.push(session.dt_end());
-                // Apple calendar will only update even _once_
+                // Apple calendar will only update event _once_
                 // even when `DTSTAMP` and `LAST-MODIFIED` are incremented
                 // setting sequence number to current unix timestamp
                 // allows updating events wihout retaining any state
