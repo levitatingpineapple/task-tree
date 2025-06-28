@@ -16,11 +16,12 @@ pub struct Task {
     done: Option<bool>,
     text: String,
     sessions: Vec<Session>,
-    parent: Option<usize>,
+    parent_index: Option<usize>,
 }
 
 impl Task {
     /// Creates task from markdown list item
+    /// Any code blocks must be decodable to a session
     pub fn new(item: &ListItem, parent: Option<usize>) -> Result<Task, TaskErr> {
         let node = item.children.get(0).ok_or(TaskErr::EmptyListItem)?;
         let paragraph = if let Node::Paragraph(paragraph) = node {
@@ -28,25 +29,24 @@ impl Task {
         } else {
             Err(TaskErr::MissingParagraph)
         }?;
-        let mut event = Task {
+        let mut task = Task {
             done: item.checked,
             text: String::new(),
             sessions: Vec::new(),
-            parent,
+            parent_index: parent,
         };
         for child in &paragraph.children {
             if let Node::InlineCode(inline_code) = child {
-                event
-                    .sessions
+                task.sessions
                     .push(Session::from_str(&inline_code.value).map_err(TaskErr::Session)?);
             } else {
-                event.text.push_str(&child.to_string());
+                task.text.push_str(&child.to_string());
             }
         }
-        if let Some(pos) = event.text.rfind(|c| c != ' ') {
-            event.text.truncate(pos + 1);
+        if let Some(pos) = task.text.rfind(|c| c != ' ') {
+            task.text.truncate(pos + 1);
         }
-        Ok(event)
+        Ok(task)
     }
 
     pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
@@ -82,11 +82,11 @@ impl Task {
     // TODO: Consider that the additional items could go into description
     fn parents(&self, tasks: &Vec<Task>) -> String {
         let mut summaries = Vec::new();
-        let mut parent_idx = self.parent;
+        let mut parent_idx = self.parent_index;
         while let Some(idx) = parent_idx {
             if let Some(parent_task) = tasks.get(idx) {
                 summaries.push(parent_task.text.clone());
-                parent_idx = parent_task.parent;
+                parent_idx = parent_task.parent_index;
             } else {
                 break;
             }
@@ -150,7 +150,7 @@ mod tests {
                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
             ],
-            parent: None,
+            parent_index: None,
         };
         assert_eq!(Task::new(&li, None), Ok(task));
     }

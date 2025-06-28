@@ -11,7 +11,7 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let md_syntax_tree =
         to_mdast(&read_to_string(md_path)?, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let mut tasks = Vec::new();
-    collect_tasks(&md_syntax_tree, &mut tasks, None)?;
+    collect_tasks_recursively(&md_syntax_tree, &mut tasks, None)?;
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     for task in &tasks {
         for event in task.events(&tasks) {
@@ -29,15 +29,19 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 
 /// Recursively traverses markdown AST,
 /// extracts `ListItem` nodes and converts them to tasks
-fn collect_tasks(
+fn collect_tasks_recursively(
     node: &Node,
     tasks: &mut Vec<Task>,
     parent: Option<usize>,
 ) -> Result<(), ExportErr> {
-    fn recurse(node: &Node, tasks: &mut Vec<Task>, parent: Option<usize>) -> Result<(), ExportErr> {
+    fn traverse_children(
+        node: &Node,
+        tasks: &mut Vec<Task>,
+        parent: Option<usize>,
+    ) -> Result<(), ExportErr> {
         if let Some(children) = node.children() {
             for child in children {
-                collect_tasks(child, tasks, parent)?;
+                collect_tasks_recursively(child, tasks, parent)?;
             }
         }
         Ok(())
@@ -46,10 +50,10 @@ fn collect_tasks(
         let task = Task::new(list_item, parent)?;
         tasks.push(task);
         // Recursive call with last appended task as parent
-        recurse(node, tasks, Some(tasks.len() - 1))?;
+        traverse_children(node, tasks, Some(tasks.len() - 1))?;
     } else {
         // Recursive call keeping the existing parent
-        recurse(node, tasks, parent)?;
+        traverse_children(node, tasks, parent)?;
     }
     Ok(())
 }
