@@ -10,12 +10,12 @@ use std::{
     str::FromStr,
 };
 
-#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub struct Task {
     done: Option<bool>,
     text: String,
     sessions: Vec<Session>,
+    // TODO: Remove index based ref
     parent_index: Option<usize>,
 }
 
@@ -23,8 +23,8 @@ impl Task {
     /// Creates task from markdown list item
     /// Any code blocks must be decodable to a session
     pub fn new(item: &ListItem, parent: Option<usize>) -> Result<Task, TaskErr> {
-        let node = item.children.get(0).ok_or(TaskErr::EmptyListItem)?;
-        let paragraph = if let Node::Paragraph(paragraph) = node {
+        let first_child = item.children.get(0).ok_or(TaskErr::EmptyListItem)?;
+        let paragraph = if let Node::Paragraph(paragraph) = first_child {
             Ok(paragraph)
         } else {
             Err(TaskErr::MissingParagraph)
@@ -79,7 +79,7 @@ impl Task {
         return test;
     }
 
-    // TODO: Consider that the additional items could go into description
+    // TODO: This should be passed in, by just traversing the tree (Contextsa)
     fn parents(&self, tasks: &Vec<Task>) -> String {
         let mut summaries = Vec::new();
         let mut parent_idx = self.parent_index;
