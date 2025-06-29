@@ -57,11 +57,10 @@ fn build_tree(node: &Node, root: &mut Group) -> Result<(), TreeErr> {
             foo.sub.push(Group::new(node.to_string()));
         }
         Node::ListItem(list_item) => {
-            let task = Task::new(&list_item, None)?;
+            let task = Task::new(&list_item)?;
             root.last_added().tasks.push(task);
             // TODO: Probably no need to recurse here - list item should initialise with all it's children?
         }
-
         _ => {
             // println!("ignore node")
         }

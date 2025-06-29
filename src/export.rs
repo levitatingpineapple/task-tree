@@ -14,7 +14,8 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     collect_tasks_recursively(&md_syntax_tree, &mut tasks, None)?;
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     for task in &tasks {
-        for event in task.events(&tasks) {
+        // TODO: Here we should pass in the context of the task (groups, parent tasks)
+        for event in task.events() {
             calendar.add_event(event);
         }
     }
@@ -47,7 +48,7 @@ fn collect_tasks_recursively(
         Ok(())
     }
     if let Node::ListItem(list_item) = node {
-        let task = Task::new(list_item, parent)?;
+        let task = Task::new(list_item)?;
         tasks.push(task);
         // Recursive call with last appended task as parent
         traverse_children(node, tasks, Some(tasks.len() - 1))?;
@@ -71,4 +72,19 @@ pub enum ExportErr {
 
     #[error("Task error: {0}")]
     Task(#[from] crate::task::TaskErr),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn print_tree() {
+        let md_syntax_tree = to_mdast(
+            &read_to_string("/Users/user/notes/plan/todo.md").unwrap(),
+            &ParseOptions::gfm(),
+        )
+        .unwrap();
+        println!("{:#?}", md_syntax_tree);
+    }
 }

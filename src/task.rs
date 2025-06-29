@@ -2,7 +2,7 @@ use crate::session::{self, Session, SessionErr};
 use chrono::Local;
 use ics::{
     Event,
-    properties::{Description, RRule, Sequence, Summary},
+    properties::{RRule, Sequence, Summary},
 };
 use markdown::mdast::{ListItem, Node};
 use std::{
@@ -10,31 +10,30 @@ use std::{
     str::FromStr,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Task {
     done: Option<bool>,
     text: String,
     sessions: Vec<Session>,
-    // TODO: Remove index based ref
-    parent_index: Option<usize>,
+    sub: Vec<Task>,
 }
 
 impl Task {
     /// Creates task from markdown list item
     /// Any code blocks must be decodable to a session
-    pub fn new(item: &ListItem, parent: Option<usize>) -> Result<Task, TaskErr> {
-        let first_child = item.children.get(0).ok_or(TaskErr::EmptyListItem)?;
+    pub fn new(list_item: &ListItem) -> Result<Task, TaskErr> {
+        let mut child_iter = list_item.children.iter();
+        let first_child = child_iter.next().ok_or(TaskErr::EmptyListItem)?;
         let paragraph = if let Node::Paragraph(paragraph) = first_child {
             Ok(paragraph)
         } else {
             Err(TaskErr::MissingParagraph)
         }?;
         let mut task = Task {
-            done: item.checked,
-            text: String::new(),
-            sessions: Vec::new(),
-            parent_index: parent,
+            done: list_item.checked,
+            ..Default::default()
         };
+        // Collect description TODO: Should this be handled by the UTIL?
         for child in &paragraph.children {
             if let Node::InlineCode(inline_code) = child {
                 task.sessions
@@ -43,25 +42,37 @@ impl Task {
                 task.text.push_str(&child.to_string());
             }
         }
+        // Removes trailing space, present when ther are sessions
         if let Some(pos) = task.text.rfind(|c| c != ' ') {
             task.text.truncate(pos + 1);
         }
+
+        if let Some(second_child) = child_iter.next() {
+            let list = if let Node::List(list) = second_child {
+                Ok(list)
+            } else {
+                Err(TaskErr::NotList)
+            }?;
+            for li in &list.children {
+                println!("{:?}", li);
+            }
+        }
+
         Ok(task)
     }
 
-    pub fn events(&self, tasks: &Vec<Task>) -> Vec<Event> {
+    pub fn events(&self) -> Vec<Event> {
         let now = Local::now();
         let dtstamp = session::formatted(now);
-        let parents = self.parents(tasks);
         let test: Vec<Event> = self
             .sessions
             .iter()
             .enumerate()
             .map(|(i, session)| {
-                let id = self.event_id(&parents, i);
+                let id = self.event_id(i); // TODO: This should take context into account
                 let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
                 event.push(Summary::new(self.text.clone()));
-                event.push(Description::new(parents.clone()));
+                // event.push(Description::new(parents.clone()));
                 event.push(session.dt_start());
                 event.push(session.dt_end());
                 // Apple calendar will only update event _once_
@@ -79,28 +90,10 @@ impl Task {
         return test;
     }
 
-    // TODO: This should be passed in, by just traversing the tree (Contextsa)
-    fn parents(&self, tasks: &Vec<Task>) -> String {
-        let mut summaries = Vec::new();
-        let mut parent_idx = self.parent_index;
-        while let Some(idx) = parent_idx {
-            if let Some(parent_task) = tasks.get(idx) {
-                summaries.push(parent_task.text.clone());
-                parent_idx = parent_task.parent_index;
-            } else {
-                break;
-            }
-        }
-        summaries.reverse();
-        summaries.join("\\n")
-    }
-
-    /// Each session is uniquely identified by hash of
-    /// the task summary and it's index
-    fn event_id(&self, parents: &str, session: usize) -> u64 {
+    // TODO: This still requires context to be created - will have to do dfs on the group tree
+    fn event_id(&self, session: usize) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.text.hash(&mut hasher);
-        parents.hash(&mut hasher);
         session.hash(&mut hasher);
         hasher.finish()
     }
@@ -110,8 +103,10 @@ impl Task {
 pub enum TaskErr {
     #[error("Nothing in the list")]
     EmptyListItem,
-    #[error("List should contain a paragraph")]
+    #[error("First child should be a paragraph")]
     MissingParagraph,
+    #[error("Second child should be a list")]
+    NotList,
     #[error("Session error: {0}")]
     Session(SessionErr),
 }
@@ -141,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn event_new() {
+    fn task_new() {
         let li = list_item("- [ ] My _special_ task `25/03/28_12:30-14:00` `25/02/03_21:45-22:30`");
         let task = Task {
             done: Some(false),
@@ -150,8 +145,8 @@ mod tests {
                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
             ],
-            parent_index: None,
+            sub: vec![],
         };
-        assert_eq!(Task::new(&li, None), Ok(task));
+        assert_eq!(Task::new(&li), Ok(task));
     }
 }
