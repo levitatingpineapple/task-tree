@@ -4,7 +4,7 @@ use ics::{
     Event,
     properties::{RRule, Sequence, Summary},
 };
-use markdown::mdast::{ListItem, Node};
+use markdown::mdast::{List, ListItem, Node};
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     str::FromStr,
@@ -19,6 +19,16 @@ pub struct Task {
 }
 
 impl Task {
+    pub fn tasks(list: &List) -> Result<Vec<Task>, TaskErr> {
+        list.children
+            .iter()
+            .map(|child| match child {
+                Node::ListItem(item) => Task::new(item),
+                _ => Err(TaskErr::NotListItem),
+            })
+            .collect()
+    }
+
     /// Creates task from markdown list item
     /// Any code blocks must be decodable to a session
     pub fn new(list_item: &ListItem) -> Result<Task, TaskErr> {
@@ -48,14 +58,11 @@ impl Task {
         }
 
         if let Some(second_child) = child_iter.next() {
-            let list = if let Node::List(list) = second_child {
-                Ok(list)
+            if let Node::List(list) = second_child {
+                task.sub = Task::tasks(list)?
             } else {
-                Err(TaskErr::NotList)
-            }?;
-            for li in &list.children {
-                println!("{:?}", li);
-            }
+                return Err(TaskErr::NotList);
+            };
         }
 
         Ok(task)
@@ -103,6 +110,8 @@ impl Task {
 pub enum TaskErr {
     #[error("Nothing in the list")]
     EmptyListItem,
+    #[error("Expected list item")]
+    NotListItem,
     #[error("First child should be a paragraph")]
     MissingParagraph,
     #[error("Second child should be a list")]

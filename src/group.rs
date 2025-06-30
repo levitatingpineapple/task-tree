@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables)]
+#![allow(dead_code)]
 use crate::task::{Task, TaskErr};
 use markdown::mdast::Node;
 
@@ -10,9 +10,26 @@ pub struct Group {
 }
 
 impl Group {
-    pub fn from_mdast(mdast: Node) -> Result<Self, TreeErr> {
-        let mut root = Group::new("Main");
-        build_tree(&mdast, &mut root)?;
+    pub fn from_mdast(mdast: Node) -> Result<Self, GroupErr> {
+        let mut root = Group::new("Root");
+
+        if let Some(children) = mdast.children() {
+            for child in children {
+                match child {
+                    Node::Heading(heading) => {
+                        let foo = root
+                            .last_sub(heading.depth - 1)
+                            .ok_or(GroupErr::HeadingOrder)?;
+                        foo.sub.push(Group::new(child.to_string()));
+                    }
+                    Node::List(list) => {
+                        let tasks = Task::tasks(list)?;
+                        root.last_added().tasks = tasks;
+                    }
+                    _ => { /* Ignore other node types */ }
+                }
+            }
+        }
         Ok(root)
     }
 
@@ -23,6 +40,7 @@ impl Group {
         }
     }
 
+    /// Returns last subcategory at some level
     pub fn last_sub(&mut self, depth: u8) -> Option<&mut Group> {
         if depth == 0 {
             Some(self)
@@ -31,46 +49,23 @@ impl Group {
         }
     }
 
+    /// Assuming tree is built depth-first returns last added element
     pub fn last_added(&mut self) -> &mut Group {
         if self.sub.is_empty() {
             self
         } else {
+            // Unwrap required due to borrow checker..
             self.sub.last_mut().unwrap().last_added()
         }
     }
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]
-pub enum TreeErr {
+pub enum GroupErr {
     #[error("Heading parent missing")]
     HeadingOrder,
     #[error("Task error: {0}")]
     Ts(#[from] TaskErr),
-}
-
-fn build_tree(node: &Node, root: &mut Group) -> Result<(), TreeErr> {
-    match node {
-        Node::Heading(heading) => {
-            let foo = root
-                .last_sub(heading.depth - 1)
-                .ok_or(TreeErr::HeadingOrder)?;
-            foo.sub.push(Group::new(node.to_string()));
-        }
-        Node::ListItem(list_item) => {
-            let task = Task::new(&list_item)?;
-            root.last_added().tasks.push(task);
-            // TODO: Probably no need to recurse here - list item should initialise with all it's children?
-        }
-        _ => {
-            // println!("ignore node")
-        }
-    }
-    if let Some(children) = node.children() {
-        for child in children {
-            build_tree(child, root)?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

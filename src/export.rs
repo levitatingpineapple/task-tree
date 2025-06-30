@@ -76,15 +76,18 @@ pub enum ExportErr {
 
 #[cfg(test)]
 mod tests {
+    use crate::tree::Group;
+
     use super::*;
 
     #[test]
     fn print_tree() {
-        let md_syntax_tree = to_mdast(
+        let mdast = to_mdast(
             &read_to_string("/Users/user/notes/plan/todo.md").unwrap(),
             &ParseOptions::gfm(),
         )
         .unwrap();
-        println!("{:#?}", md_syntax_tree);
+        let tree = Group::from_mdast(mdast);
+        println!("{:#?}", tree);
     }
 }
