@@ -1,4 +1,7 @@
-use crate::session::{self, Session, SessionErr};
+use crate::{
+    nested::Nested,
+    session::{self, Session, SessionErr},
+};
 use chrono::Local;
 use ics::{
     Event,
@@ -15,7 +18,7 @@ pub struct Task {
     done: Option<bool>,
     text: String,
     sessions: Vec<Session>,
-    sub: Vec<Task>,
+    children: Vec<Task>,
 }
 
 impl Task {
@@ -59,7 +62,7 @@ impl Task {
 
         if let Some(second_child) = child_iter.next() {
             if let Node::List(list) = second_child {
-                task.sub = Task::tasks(list)?
+                task.children = Task::tasks(list)?
             } else {
                 return Err(TaskErr::NotList);
             };
@@ -103,6 +106,12 @@ impl Task {
         self.text.hash(&mut hasher);
         session.hash(&mut hasher);
         hasher.finish()
+    }
+}
+
+impl Nested for Task {
+    fn children(&self) -> &Vec<Self> {
+        &self.children
     }
 }
 
@@ -154,7 +163,7 @@ mod tests {
                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
             ],
-            sub: vec![],
+            children: vec![],
         };
         assert_eq!(Task::new(&li), Ok(task));
     }

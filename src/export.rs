@@ -1,7 +1,7 @@
 use crate::task::Task;
 use dirs::home_dir;
 use ics::ICalendar;
-use markdown::{ParseOptions, mdast::Node, to_mdast};
+use markdown::{ParseOptions, to_mdast};
 use std::{
     fs::{create_dir_all, read_to_string},
     path::Path,
@@ -10,8 +10,9 @@ use std::{
 pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let md_syntax_tree =
         to_mdast(&read_to_string(md_path)?, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
-    let mut tasks = Vec::new();
-    collect_tasks_recursively(&md_syntax_tree, &mut tasks, None)?;
+    let tasks = Vec::<Task>::new();
+    println!("{:?}", md_syntax_tree);
+    // collect_tasks_recursively(&md_syntax_tree, &mut tasks, None)?;
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     for task in &tasks {
         // TODO: Here we should pass in the context of the task (groups, parent tasks)
@@ -30,34 +31,34 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 
 /// Recursively traverses markdown AST,
 /// extracts `ListItem` nodes and converts them to tasks
-fn collect_tasks_recursively(
-    node: &Node,
-    tasks: &mut Vec<Task>,
-    parent: Option<usize>,
-) -> Result<(), ExportErr> {
-    fn traverse_children(
-        node: &Node,
-        tasks: &mut Vec<Task>,
-        parent: Option<usize>,
-    ) -> Result<(), ExportErr> {
-        if let Some(children) = node.children() {
-            for child in children {
-                collect_tasks_recursively(child, tasks, parent)?;
-            }
-        }
-        Ok(())
-    }
-    if let Node::ListItem(list_item) = node {
-        let task = Task::new(list_item)?;
-        tasks.push(task);
-        // Recursive call with last appended task as parent
-        traverse_children(node, tasks, Some(tasks.len() - 1))?;
-    } else {
-        // Recursive call keeping the existing parent
-        traverse_children(node, tasks, parent)?;
-    }
-    Ok(())
-}
+// fn collect_tasks_recursively(
+//     node: &Node,
+//     tasks: &mut Vec<Task>,
+//     parent: Option<usize>,
+// ) -> Result<(), ExportErr> {
+//     fn traverse_children(
+//         node: &Node,
+//         tasks: &mut Vec<Task>,
+//         parent: Option<usize>,
+//     ) -> Result<(), ExportErr> {
+//         if let Some(children) = node.children() {
+//             for child in children {
+//                 collect_tasks_recursively(child, tasks, parent)?;
+//             }
+//         }
+//         Ok(())
+//     }
+//     if let Node::ListItem(list_item) = node {
+//         let task = Task::new(list_item)?;
+//         tasks.push(task);
+//         // Recursive call with last appended task as parent
+//         traverse_children(node, tasks, Some(tasks.len() - 1))?;
+//     } else {
+//         // Recursive call keeping the existing parent
+//         traverse_children(node, tasks, parent)?;
+//     }
+//     Ok(())
+// }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExportErr {
@@ -76,18 +77,23 @@ pub enum ExportErr {
 
 #[cfg(test)]
 mod tests {
-    use crate::tree::Group;
+    use crate::group::Group;
 
     use super::*;
 
     #[test]
-    fn print_tree() {
+    fn test_export() {
         let mdast = to_mdast(
             &read_to_string("/Users/user/notes/plan/todo.md").unwrap(),
             &ParseOptions::gfm(),
         )
         .unwrap();
-        let tree = Group::from_mdast(mdast);
-        println!("{:#?}", tree);
+        let group = Group::from_mdast(mdast);
+
+        for a in group.iter() {
+            println!("{}", a.text)
+        }
+
+        println!("{:#?}", group);
     }
 }

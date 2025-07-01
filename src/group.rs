@@ -1,12 +1,17 @@
 #![allow(dead_code)]
-use crate::task::{Task, TaskErr};
+use std::slice::Iter;
+
+use crate::{
+    nested::Nested,
+    task::{Task, TaskErr},
+};
 use markdown::mdast::Node;
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Group {
-    text: String,
-    sub: Vec<Group>,
-    tasks: Vec<Task>,
+    pub text: String,
+    pub children: Vec<Group>,
+    pub tasks: Vec<Task>,
 }
 
 impl Group {
@@ -20,7 +25,7 @@ impl Group {
                         let foo = root
                             .last_sub(heading.depth - 1)
                             .ok_or(GroupErr::HeadingOrder)?;
-                        foo.sub.push(Group::new(child.to_string()));
+                        foo.children.push(Group::new(child.to_string()));
                     }
                     Node::List(list) => {
                         let tasks = Task::tasks(list)?;
@@ -45,18 +50,24 @@ impl Group {
         if depth == 0 {
             Some(self)
         } else {
-            self.sub.last_mut().map(|s| s.last_sub(depth - 1))?
+            self.children.last_mut().map(|s| s.last_sub(depth - 1))?
         }
     }
 
     /// Assuming tree is built depth-first returns last added element
     pub fn last_added(&mut self) -> &mut Group {
-        if self.sub.is_empty() {
+        if self.children.is_empty() {
             self
         } else {
             // Unwrap required due to borrow checker..
-            self.sub.last_mut().unwrap().last_added()
+            self.children.last_mut().unwrap().last_added()
         }
+    }
+}
+
+impl Nested for Group {
+    fn children(&self) -> &Vec<Self> {
+        &self.children
     }
 }
 
@@ -66,31 +77,4 @@ pub enum GroupErr {
     HeadingOrder,
     #[error("Task error: {0}")]
     Ts(#[from] TaskErr),
-}
-
-#[cfg(test)]
-mod tests {
-    use indoc::indoc;
-    use markdown::{ParseOptions, to_mdast};
-
-    use super::*;
-
-    #[test]
-    fn new_tree() {
-        let markdown = indoc! {r#"
-            # One
-            - [ ] Task1
-            - [x] Task2
-            ## SubA
-            ### Nested
-            ## SubB
-            - [ ] WORK
-            # Two
-        "#};
-
-        let mdast = to_mdast(&markdown, &ParseOptions::gfm()).unwrap();
-        let group = Group::from_mdast(mdast);
-
-        println!("{:#?}", group);
-    }
 }
