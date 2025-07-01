@@ -15,10 +15,10 @@ use std::{
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Task {
-    done: Option<bool>,
-    text: String,
-    sessions: Vec<Session>,
-    children: Vec<Task>,
+    pub done: Option<bool>,
+    pub text: String,
+    pub sessions: Vec<Session>,
+    pub children: Vec<Task>,
 }
 
 impl Task {

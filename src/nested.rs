@@ -12,9 +12,9 @@ pub trait Nested: Sized {
 }
 
 #[derive(Debug)]
-pub struct Foo<'a, T> {
-    leaf: &'a T,
-    parents: Vec<&'a T>,
+pub struct Item<'a, T> {
+    pub leaf: &'a T,
+    pub parents: Vec<&'a T>,
 }
 
 pub struct DFI<'a, T: Nested> {
@@ -23,12 +23,12 @@ pub struct DFI<'a, T: Nested> {
 }
 
 impl<'a, T: Nested> Iterator for DFI<'a, T> {
-    type Item = Foo<'a, T>;
+    type Item = Item<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(children_iter) = self.iterators.last_mut() {
             if let Some(child_ref) = children_iter.next() {
-                let item = Foo {
+                let item = Item {
                     leaf: child_ref,
                     parents: self.nodes.clone(),
                 };
@@ -65,7 +65,7 @@ mod tests {
         }
     }
 
-    impl fmt::Display for super::Foo<'_, Node> {
+    impl fmt::Display for super::Item<'_, Node> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             for parent in self.parents.iter() {
                 write!(f, "{}->", parent.text)?;
