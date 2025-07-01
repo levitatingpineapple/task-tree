@@ -11,25 +11,30 @@ pub trait Nested: Sized {
     }
 }
 
+#[derive(Debug)]
+pub struct Foo<'a, T> {
+    leaf: &'a T,
+    parents: Vec<&'a T>,
+}
+
 pub struct DFI<'a, T: Nested> {
     nodes: Vec<&'a T>,
     iterators: Vec<Iter<'a, T>>,
 }
 
-pub struct Element<'a, T> {
-    leaf: &'a T,
-    parents: Vec<&'a T>,
-}
-
 impl<'a, T: Nested> Iterator for DFI<'a, T> {
-    type Item = Vec<&'a T>;
+    type Item = Foo<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(children_iter) = self.iterators.last_mut() {
             if let Some(child_ref) = children_iter.next() {
+                let item = Foo {
+                    leaf: child_ref,
+                    parents: self.nodes.clone(),
+                };
                 self.nodes.push(child_ref);
                 self.iterators.push(child_ref.children().iter());
-                Some(self.nodes.clone())
+                Some(item)
             } else {
                 self.nodes.pop();
                 self.iterators.pop();
@@ -43,6 +48,10 @@ impl<'a, T: Nested> Iterator for DFI<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt;
+
+    use indoc::indoc;
+
     use super::*;
 
     struct Node {
@@ -56,17 +65,21 @@ mod tests {
         }
     }
 
+    impl fmt::Display for super::Foo<'_, Node> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for parent in self.parents.iter() {
+                write!(f, "{}->", parent.text)?;
+            }
+            write!(f, "[{}]", self.leaf.text)?;
+            Ok(())
+        }
+    }
+
     fn node(text: &str, children: Vec<Node>) -> Node {
         Node {
             text: text.to_string(),
             children,
         }
-    }
-
-    fn iter_result(node: Node) -> Vec<Vec<String>> {
-        node.nested_iter()
-            .map(|level| level.iter().map(|node| node.text.clone()).collect())
-            .collect()
     }
 
     #[test]
@@ -84,16 +97,22 @@ mod tests {
             ]),
             node("Bar", vec![]),
         ]);
-        let expect = vec![
-            vec!["Root"],
-            vec!["Root", "Foo"],
-            vec!["Root", "Foo", "FooA"],
-            vec!["Root", "Foo", "FooA", "FooA1"],
-            vec!["Root", "Foo", "FooA", "FooA2"],
-            vec!["Root", "Foo", "FooB"],
-            vec!["Root", "Foo", "FooB", "FooB1"],
-            vec!["Root", "Bar"],
-        ];
-        assert_eq!(iter_result(tree), expect);
+        let display = tree
+            .nested_iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<String>>()
+            .join("\n")
+            + "\n";
+        let expectation = indoc! {"
+            [Root]
+            Root->[Foo]
+            Root->Foo->[FooA]
+            Root->Foo->FooA->[FooA1]
+            Root->Foo->FooA->[FooA2]
+            Root->Foo->[FooB]
+            Root->Foo->FooB->[FooB1]
+            Root->[Bar]
+        "};
+        assert_eq!(expectation, display);
     }
 }
