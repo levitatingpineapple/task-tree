@@ -1,13 +1,10 @@
-#![allow(dead_code)]
-use std::slice::Iter;
-
 use crate::{
-    nested::Nested,
+    nested::NestedIter,
     task::{Task, TaskErr},
 };
 use markdown::mdast::Node;
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Group {
     pub text: String,
     pub children: Vec<Group>,
@@ -46,7 +43,7 @@ impl Group {
     }
 
     /// Returns last subcategory at some level
-    pub fn last_sub(&mut self, depth: u8) -> Option<&mut Group> {
+    fn last_sub(&mut self, depth: u8) -> Option<&mut Group> {
         if depth == 0 {
             Some(self)
         } else {
@@ -55,7 +52,7 @@ impl Group {
     }
 
     /// Assuming tree is built depth-first returns last added element
-    pub fn last_added(&mut self) -> &mut Group {
+    fn last_added(&mut self) -> &mut Group {
         if self.children.is_empty() {
             self
         } else {
@@ -65,7 +62,7 @@ impl Group {
     }
 }
 
-impl Nested for Group {
+impl NestedIter for Group {
     fn children(&self) -> &Vec<Self> {
         &self.children
     }

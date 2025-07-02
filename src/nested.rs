@@ -1,8 +1,11 @@
 use std::slice::{Iter, from_ref};
 
-pub trait Nested: Sized {
+pub trait NestedIter: Sized {
     fn children(&self) -> &Vec<Self>;
 
+    /// Nested iterator is a depth-first iterator that
+    /// visits all nodes while prividing full path to parent nodes
+    /// Parents are ordered starting from root
     fn nested_iter(&self) -> DFI<Self> {
         DFI {
             nodes: vec![],
@@ -12,23 +15,23 @@ pub trait Nested: Sized {
 }
 
 #[derive(Debug)]
-pub struct Item<'a, T> {
+pub struct Path<'a, T> {
     pub leaf: &'a T,
     pub parents: Vec<&'a T>,
 }
 
-pub struct DFI<'a, T: Nested> {
+pub struct DFI<'a, T: NestedIter> {
     nodes: Vec<&'a T>,
     iterators: Vec<Iter<'a, T>>,
 }
 
-impl<'a, T: Nested> Iterator for DFI<'a, T> {
-    type Item = Item<'a, T>;
+impl<'a, T: NestedIter> Iterator for DFI<'a, T> {
+    type Item = Path<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(children_iter) = self.iterators.last_mut() {
             if let Some(child_ref) = children_iter.next() {
-                let item = Item {
+                let item = Path {
                     leaf: child_ref,
                     parents: self.nodes.clone(),
                 };
@@ -38,7 +41,7 @@ impl<'a, T: Nested> Iterator for DFI<'a, T> {
             } else {
                 self.nodes.pop();
                 self.iterators.pop();
-                self.next() // Recursive call, while backtracking
+                self.next() // Recursive call while backtracking
             }
         } else {
             None
@@ -59,13 +62,13 @@ mod tests {
         children: Vec<Node>,
     }
 
-    impl Nested for Node {
+    impl NestedIter for Node {
         fn children(&self) -> &Vec<Self> {
             &self.children
         }
     }
 
-    impl fmt::Display for super::Item<'_, Node> {
+    impl fmt::Display for super::Path<'_, Node> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             for parent in self.parents.iter() {
                 write!(f, "{}->", parent.text)?;

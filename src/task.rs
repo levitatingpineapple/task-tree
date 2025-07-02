@@ -1,19 +1,11 @@
 use crate::{
-    nested::Nested,
-    session::{self, Session, SessionErr},
-};
-use chrono::Local;
-use ics::{
-    Event,
-    properties::{RRule, Sequence, Summary},
+    nested::NestedIter,
+    session::{Session, SessionErr},
 };
 use markdown::mdast::{List, ListItem, Node};
-use std::{
-    hash::{DefaultHasher, Hash, Hasher},
-    str::FromStr,
-};
+use std::str::FromStr;
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Task {
     pub done: Option<bool>,
     pub text: String,
@@ -46,20 +38,20 @@ impl Task {
             done: list_item.checked,
             ..Default::default()
         };
+        let mut task_text = String::new();
+
         // Collect description TODO: Should this be handled by the UTIL?
         for child in &paragraph.children {
             if let Node::InlineCode(inline_code) = child {
                 task.sessions
                     .push(Session::from_str(&inline_code.value).map_err(TaskErr::Session)?);
             } else {
-                task.text.push_str(&child.to_string());
+                task_text.push_str(&child.to_string());
             }
         }
-        // Removes trailing space, present when ther are sessions
-        if let Some(pos) = task.text.rfind(|c| c != ' ') {
-            task.text.truncate(pos + 1);
-        }
+        task.text = task_text.trim().to_string();
 
+        // Populate child tasks
         if let Some(second_child) = child_iter.next() {
             if let Node::List(list) = second_child {
                 task.children = Task::tasks(list)?
@@ -70,46 +62,9 @@ impl Task {
 
         Ok(task)
     }
-
-    pub fn events(&self) -> Vec<Event> {
-        let now = Local::now();
-        let dtstamp = session::formatted(now);
-        let test: Vec<Event> = self
-            .sessions
-            .iter()
-            .enumerate()
-            .map(|(i, session)| {
-                let id = self.event_id(i); // TODO: This should take context into account
-                let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
-                event.push(Summary::new(self.text.clone()));
-                // event.push(Description::new(parents.clone()));
-                event.push(session.dt_start());
-                event.push(session.dt_end());
-                // Apple calendar will only update event _once_
-                // even when `DTSTAMP` and `LAST-MODIFIED` are incremented
-                // setting sequence number to current unix timestamp
-                // allows updating events wihout retaining any state
-                event.push(Sequence::new(now.timestamp().to_string()));
-                if let Some(rrule) = &session.rrule {
-                    event.push(RRule::new(rrule.to_string()));
-                }
-                event
-            })
-            .collect();
-
-        return test;
-    }
-
-    // TODO: This still requires context to be created - will have to do dfs on the group tree
-    fn event_id(&self, session: usize) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.text.hash(&mut hasher);
-        session.hash(&mut hasher);
-        hasher.finish()
-    }
 }
 
-impl Nested for Task {
+impl NestedIter for Task {
     fn children(&self) -> &Vec<Self> {
         &self.children
     }
