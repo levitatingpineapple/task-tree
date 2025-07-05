@@ -1,56 +1,73 @@
 use super::timestamp::{Ts, TsErr};
-use chrono::{DateTime, Local, NaiveDate};
+use chrono::{NaiveDate, NaiveDateTime, ParseError};
 use std::{ops, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum Range {
     AllDay(ops::Range<NaiveDate>),
-    Timed(ops::Range<DateTime<Local>>),
+    Timed(ops::Range<NaiveDateTime>),
 }
 
 impl Range {
     pub fn start(&self) -> Ts {
-        match self {
-            Range::AllDay(r) => Ts::Date(r.start),
-            Range::Timed(r) => Ts::Timed(r.start),
-        }
+        // match self {
+        //     Range::AllDay(nd) => Ts::Date(nd.start),
+        //     Range::Timed(dt) => Ts::Timed(dt.start),
+        // }
+        todo!()
     }
 }
 
 impl FromStr for Range {
     type Err = RangeErr;
 
+    // #[rustfmt::skip]
     fn from_str(str: &str) -> Result<Range, RangeErr> {
         let mut parts = str.splitn(2, "-");
-        let start_str = parts.next().expect("first");
-        let end_str_suffix = parts.next().ok_or(RangeErr::MissingEndBound)?;
-        let mut end_str = start_str.to_string();
-        end_str.replace_range(start_str.len() - end_str_suffix.len().., end_str_suffix);
-        let start = Ts::from_str(start_str)?;
-        let end = Ts::from_str(&end_str)?;
-        match start {
-            Ts::Date(sd) => match end {
-                Ts::Date(ed) => {
-                    if sd <= ed {
-                        Ok(Range::AllDay(sd..ed))
-                    } else {
-                        Err(RangeErr::EndBeforeStart)
-                    }
-                }
-                Ts::Timed(_) => Err(RangeErr::BoundMismatch),
-            },
-            Ts::Timed(sdt) => match end {
-                Ts::Date(_) => Err(RangeErr::BoundMismatch),
-                Ts::Timed(edt) => {
-                    if sdt <= edt {
-                        Ok(Range::Timed(sdt..edt))
-                    } else {
-                        Err(RangeErr::EndBeforeStart)
-                    }
-                }
-            },
-        }
+
+        // Build start
+        let start = parts.next().expect("first");
+
+        // Build end
+        let end_part = parts.next().ok_or(RangeErr::MissingEndBound)?;
+        let mut end = start.to_string();
+        end.replace_range(start.len() - end_part.len().., end_part);
+        Ok(if start.contains("_") {
+            Range::Timed(date_time(start)?..date_time(&end)?)
+        } else {
+            Range::AllDay(date(start)?..date(&end)?)
+        })
     }
+}
+
+fn date_time(str: &str) -> Result<NaiveDateTime, RangeErr> {
+    NaiveDateTime::parse_from_str(
+        &overlay(str, "XX/01/01_00:00:00", false),
+        "%y/%m/%d_%H:%M:%S",
+    )
+    .map_err(RangeErr::Parse)
+}
+
+#[rustfmt::skip]
+fn date(string: &str) -> Result<NaiveDate, RangeErr> {
+    NaiveDate::parse_from_str(
+        &overlay(string, "XX/01/01", false),
+        "%y/%m/%d"
+    )
+    .map_err(RangeErr::Parse)
+}
+
+fn overlay(over: &str, base: &str, trailing: bool) -> String {
+    // TODO: Add out of bounds error
+    assert!(base.len() >= over.len());
+    let mut base = base.to_string();
+    if trailing {
+        base.replace_range(base.len() - over.len().., over)
+    } else {
+        base.replace_range(..over.len(), over);
+    }
+    println!("!{}!", base);
+    base
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]
@@ -63,12 +80,15 @@ pub enum RangeErr {
     BoundMismatch,
     #[error("End before start")]
     EndBeforeStart,
+
+    #[error("Time parsing error")]
+    Parse(#[from] ParseError),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{NaiveDate, TimeZone};
+    use chrono::{NaiveDate, NaiveTime};
 
     #[test]
     fn range_from_str_all_day_full() {
@@ -82,10 +102,10 @@ mod tests {
 
     #[test]
     fn range_from_str_timed_full() {
-        let start = Local.with_ymd_and_hms(2024, 12, 31, 10, 30, 0).unwrap();
-        let end = Local.with_ymd_and_hms(2025, 1, 2, 15, 45, 0).unwrap();
+        let start = date_time(2024, 12, 31, 10, 30, 0);
+        let end = date_time(2025, 1, 2, 15, 45, 0);
         assert_eq!(
-            "24/12/31_10:30-25/01/02_15:45".parse::<Range>(),
+            "24/12/31_10:30-25/01/02_15:45".parse(),
             Ok(Range::Timed(start..end))
         );
     }
@@ -102,8 +122,8 @@ mod tests {
 
     #[test]
     fn range_from_str_timed_partial() {
-        let start = Local.with_ymd_and_hms(2024, 10, 2, 10, 30, 0).unwrap();
-        let end = Local.with_ymd_and_hms(2024, 10, 2, 15, 45, 0).unwrap();
+        let start = date_time(2024, 10, 2, 10, 30, 0);
+        let end = date_time(2024, 10, 2, 15, 45, 0);
         assert_eq!(
             "24/10/02_10:30-15:45".parse::<Range>(),
             Ok(Range::Timed(start..end))
@@ -112,8 +132,8 @@ mod tests {
 
     #[test]
     fn range_from_str_timed_hours() {
-        let start = Local.with_ymd_and_hms(2024, 10, 2, 10, 0, 0).unwrap();
-        let end = Local.with_ymd_and_hms(2024, 10, 2, 15, 0, 0).unwrap();
+        let start = date_time(2024, 10, 2, 10, 0, 0);
+        let end = date_time(2024, 10, 2, 15, 0, 0);
         assert_eq!(
             "24/10/02_10-15".parse::<Range>(),
             Ok(Range::Timed(start..end))
@@ -142,5 +162,11 @@ mod tests {
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    fn date_time(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> NaiveDateTime {
+        let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
+        let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
+        NaiveDateTime::new(date, time)
     }
 }

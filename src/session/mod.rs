@@ -29,28 +29,30 @@ pub enum SessionErr {
 
 impl Session {
     pub fn dt_start<'a>(&self) -> DtStart<'a> {
-        match &self.range {
-            Range::AllDay(r) => {
-                let mut dt = DtStart::new(r.start.format("%Y%m%d").to_string());
-                dt.append(parameters!("VALUE" => "DATE"));
-                dt
-            }
-            Range::Timed(r) => {
-                println!("{:?}", r.start);
-                DtStart::new(ics_format(r.start.clone()))
-            }
-        }
+        todo!()
+        // match &self.range {
+        //     Range::AllDay(r) => {
+        //         let mut dt = DtStart::new(r.start.format("%Y%m%d").to_string());
+        //         dt.append(parameters!("VALUE" => "DATE"));
+        //         dt
+        //     }
+        //     Range::Timed(r) => {
+        //         println!("{:?}", r.start);
+        //         DtStart::new(ics_format(r.start.clone()))
+        //     }
+        // }
     }
 
     pub fn dt_end<'a>(&self) -> DtEnd<'a> {
-        match &self.range {
-            Range::AllDay(r) => {
-                let mut dt = DtEnd::new(r.end.format("%Y%m%d").to_string());
-                dt.append(parameters!("VALUE" => "DATE"));
-                dt
-            }
-            Range::Timed(r) => DtEnd::new(ics_format(r.end.clone())),
-        }
+        todo!()
+        // match &self.range {
+        //     Range::AllDay(r) => {
+        //         let mut dt = DtEnd::new(r.end.format("%Y%m%d").to_string());
+        //         dt.append(parameters!("VALUE" => "DATE"));
+        //         dt
+        //     }
+        //     Range::Timed(r) => DtEnd::new(ics_format(r.end.clone())),
+        // }
     }
 }
 
