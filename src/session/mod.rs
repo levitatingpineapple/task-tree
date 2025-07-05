@@ -35,7 +35,7 @@ impl Session {
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            timestamp::Ts::Timed(dt) => DtStart::new(formatted(dt.clone())),
+            timestamp::Ts::Timed(dt) => DtStart::new(ics_format(dt.clone())),
         }
     }
 
@@ -46,7 +46,7 @@ impl Session {
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            timestamp::Ts::Timed(dt) => DtEnd::new(formatted(dt.clone())),
+            timestamp::Ts::Timed(dt) => DtEnd::new(ics_format(dt.clone())),
         }
     }
 }
@@ -67,7 +67,7 @@ impl FromStr for Session {
     }
 }
 
-/// Formats UTC DateTime to ICS ZULU format - trailing Z
-pub fn formatted(dt: DateTime<Local>) -> String {
+/// Formats UTC DateTime to ICS ZULU format with trailing Z
+pub fn ics_format(dt: DateTime<Local>) -> String {
     dt.with_timezone(&Utc).format("%Y%m%dT%H%M%SZ").to_string()
 }
