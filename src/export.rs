@@ -25,7 +25,7 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
 
     let now = Local::now();
-    let dtstamp = session::formatted(now);
+    let dtstamp = session::ics_format(now);
 
     for group_path in root_group.nested_iter() {
         let iter = group_path.leaf.tasks.iter();
