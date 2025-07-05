@@ -1,4 +1,7 @@
-use super::timestamp::{Ts, TsErr};
+use super::{
+    range::Range,
+    timestamp::{Ts, TsErr},
+};
 use rrule::{Frequency, RRule, RRuleError, Unvalidated};
 use std::{num::ParseIntError, str::FromStr};
 

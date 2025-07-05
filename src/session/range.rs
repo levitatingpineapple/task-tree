@@ -1,39 +1,20 @@
 use super::timestamp::{Ts, TsErr};
 use chrono::{DateTime, Local, NaiveDate};
-use std::str::FromStr;
+use std::{ops, str::FromStr};
 
 #[derive(Debug, PartialEq)]
-pub struct Range {
-    pub start: Ts,
-    pub end: Ts,
+pub enum Range {
+    AllDay(ops::Range<NaiveDate>),
+    Timed(ops::Range<DateTime<Local>>),
 }
 
 impl Range {
-    fn all_day(start: NaiveDate, end: NaiveDate) -> Self {
-        Self {
-            start: Ts::Date(start),
-            end: Ts::Date(end),
+    pub fn start(&self) -> Ts {
+        match self {
+            Range::AllDay(r) => Ts::Date(r.start),
+            Range::Timed(r) => Ts::Timed(r.start),
         }
     }
-
-    fn timed(start: DateTime<Local>, end: DateTime<Local>) -> Self {
-        Self {
-            start: Ts::Timed(start),
-            end: Ts::Timed(end),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, thiserror::Error)]
-pub enum RangeErr {
-    #[error("Missing end date/time")]
-    MissingEndBound,
-    #[error("Timestamp: {0}")]
-    Timestamp(#[from] TsErr),
-    #[error("Mismatch between start and end times")]
-    BoundMismatch,
-    #[error("End before start")]
-    EndBeforeStart,
 }
 
 impl FromStr for Range {
@@ -51,7 +32,7 @@ impl FromStr for Range {
             Ts::Date(sd) => match end {
                 Ts::Date(ed) => {
                     if sd <= ed {
-                        Ok(Range::all_day(sd, ed))
+                        Ok(Range::AllDay(sd..ed))
                     } else {
                         Err(RangeErr::EndBeforeStart)
                     }
@@ -62,7 +43,7 @@ impl FromStr for Range {
                 Ts::Date(_) => Err(RangeErr::BoundMismatch),
                 Ts::Timed(edt) => {
                     if sdt <= edt {
-                        Ok(Range::timed(sdt, edt))
+                        Ok(Range::Timed(sdt..edt))
                     } else {
                         Err(RangeErr::EndBeforeStart)
                     }
@@ -70,6 +51,18 @@ impl FromStr for Range {
             },
         }
     }
+}
+
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum RangeErr {
+    #[error("Missing end date/time")]
+    MissingEndBound,
+    #[error("Timestamp: {0}")]
+    Timestamp(#[from] TsErr),
+    #[error("Mismatch between start and end times")]
+    BoundMismatch,
+    #[error("End before start")]
+    EndBeforeStart,
 }
 
 #[cfg(test)]
@@ -83,7 +76,7 @@ mod tests {
         let end = date(2025, 1, 2);
         assert_eq!(
             "24/12/31-25/01/02".parse::<Range>(),
-            Ok(Range::all_day(start, end))
+            Ok(Range::AllDay(start..end))
         );
     }
 
@@ -93,7 +86,7 @@ mod tests {
         let end = Local.with_ymd_and_hms(2025, 1, 2, 15, 45, 0).unwrap();
         assert_eq!(
             "24/12/31_10:30-25/01/02_15:45".parse::<Range>(),
-            Ok(Range::timed(start, end))
+            Ok(Range::Timed(start..end))
         );
     }
 
@@ -103,7 +96,7 @@ mod tests {
         let end = date(2024, 12, 8);
         assert_eq!(
             "24/12/02-08".parse::<Range>(),
-            Ok(Range::all_day(start, end))
+            Ok(Range::AllDay(start..end))
         );
     }
 
@@ -113,7 +106,7 @@ mod tests {
         let end = Local.with_ymd_and_hms(2024, 10, 2, 15, 45, 0).unwrap();
         assert_eq!(
             "24/10/02_10:30-15:45".parse::<Range>(),
-            Ok(Range::timed(start, end))
+            Ok(Range::Timed(start..end))
         );
     }
 
@@ -123,7 +116,7 @@ mod tests {
         let end = Local.with_ymd_and_hms(2024, 10, 2, 15, 0, 0).unwrap();
         assert_eq!(
             "24/10/02_10-15".parse::<Range>(),
-            Ok(Range::timed(start, end))
+            Ok(Range::Timed(start..end))
         );
     }
 

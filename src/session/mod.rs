@@ -29,24 +29,27 @@ pub enum SessionErr {
 
 impl Session {
     pub fn dt_start<'a>(&self) -> DtStart<'a> {
-        match self.range.start {
-            timestamp::Ts::Date(nd) => {
-                let mut dt = DtStart::new(nd.format("%Y%m%d").to_string());
+        match &self.range {
+            Range::AllDay(r) => {
+                let mut dt = DtStart::new(r.start.format("%Y%m%d").to_string());
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            timestamp::Ts::Timed(dt) => DtStart::new(ics_format(dt.clone())),
+            Range::Timed(r) => {
+                println!("{:?}", r.start);
+                DtStart::new(ics_format(r.start.clone()))
+            }
         }
     }
 
     pub fn dt_end<'a>(&self) -> DtEnd<'a> {
-        match self.range.end {
-            timestamp::Ts::Date(nd) => {
-                let mut dt = DtEnd::new(nd.format("%Y%m%d").to_string());
+        match &self.range {
+            Range::AllDay(r) => {
+                let mut dt = DtEnd::new(r.end.format("%Y%m%d").to_string());
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            timestamp::Ts::Timed(dt) => DtEnd::new(ics_format(dt.clone())),
+            Range::Timed(r) => DtEnd::new(ics_format(r.end.clone())),
         }
     }
 }
@@ -61,7 +64,7 @@ impl FromStr for Session {
             .next()
             .map(|s| Repeat::from_str(s))
             .transpose()?
-            .map(|r| r.validated_in(&range.start))
+            .map(|r| r.validated_in(&range.start()))
             .transpose()?;
         Ok(Session { range, rrule })
     }
