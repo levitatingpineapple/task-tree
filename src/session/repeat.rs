@@ -33,4 +33,23 @@ pub enum RepeatErr {
     Until(#[from] RangeErr),
 }
 
-// TODO: Cover Repeat with tests
+#[cfg(test)]
+mod tests {
+    use chrono::NaiveDate;
+
+    use super::*;
+
+    #[test]
+    fn simple_rule() {
+        let rule = rule("daily", &range());
+        print(rule);
+    }
+
+    fn range() -> Range {
+        Range::AllDay(date(25, 02, 03)..date(25, 02, 4))
+    }
+
+    fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+}
