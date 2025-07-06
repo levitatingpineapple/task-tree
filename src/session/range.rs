@@ -110,7 +110,7 @@ fn overlay(over: &str, base: &str, align: Align) -> String {
 
 /// Interprets `NaiveDateTime` as `Local`.
 /// Throws error if time is ambiguous or invalid due to winter/summer time switch
-fn local(ndt: &NaiveDateTime) -> Result<DateTime<Local>, RangeErr> {
+pub fn local(ndt: &NaiveDateTime) -> Result<DateTime<Local>, RangeErr> {
     match Local.from_local_datetime(ndt) {
         LocalResult::Single(single) => Ok(single),
         LocalResult::Ambiguous(_, _) => Err(RangeErr::AmbiguousInTimezone),
