@@ -1,8 +1,5 @@
 mod range;
 mod repeat;
-mod timestamp;
-
-use std::str::FromStr;
 
 use chrono::{DateTime, Local, Utc};
 use ics::{
@@ -10,8 +7,9 @@ use ics::{
     properties::{DtEnd, DtStart},
 };
 use range::{Range, RangeErr};
-use repeat::{Repeat, RepeatErr};
+use repeat::{RepeatErr, rule};
 use rrule::RRule;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
@@ -19,40 +17,30 @@ pub struct Session {
     pub rrule: Option<RRule>,
 }
 
-#[derive(Debug, PartialEq, thiserror::Error)]
-pub enum SessionErr {
-    #[error("Range: {0}")]
-    Range(#[from] RangeErr),
-    #[error("Repeat: {0}")]
-    Repeat(#[from] RepeatErr),
-}
-
 impl Session {
     pub fn dt_start<'a>(&self) -> DtStart<'a> {
-        todo!()
-        // match &self.range {
-        //     Range::AllDay(r) => {
-        //         let mut dt = DtStart::new(r.start.format("%Y%m%d").to_string());
-        //         dt.append(parameters!("VALUE" => "DATE"));
-        //         dt
-        //     }
-        //     Range::Timed(r) => {
-        //         println!("{:?}", r.start);
-        //         DtStart::new(ics_format(r.start.clone()))
-        //     }
-        // }
+        match &self.range {
+            Range::AllDay(r) => {
+                let mut dt = DtStart::new(r.start.format("%Y%m%d").to_string());
+                dt.append(parameters!("VALUE" => "DATE"));
+                dt
+            }
+            Range::Timed(r) => {
+                println!("{:?}", r.start);
+                DtStart::new(ics_format(r.start.clone()))
+            }
+        }
     }
 
     pub fn dt_end<'a>(&self) -> DtEnd<'a> {
-        todo!()
-        // match &self.range {
-        //     Range::AllDay(r) => {
-        //         let mut dt = DtEnd::new(r.end.format("%Y%m%d").to_string());
-        //         dt.append(parameters!("VALUE" => "DATE"));
-        //         dt
-        //     }
-        //     Range::Timed(r) => DtEnd::new(ics_format(r.end.clone())),
-        // }
+        match &self.range {
+            Range::AllDay(r) => {
+                let mut dt = DtEnd::new(r.end.format("%Y%m%d").to_string());
+                dt.append(parameters!("VALUE" => "DATE"));
+                dt
+            }
+            Range::Timed(r) => DtEnd::new(ics_format(r.end.clone())),
+        }
     }
 }
 
@@ -62,12 +50,7 @@ impl FromStr for Session {
     fn from_str(str: &str) -> Result<Session, SessionErr> {
         let mut parts = str.splitn(2, "|");
         let range = Range::from_str(parts.next().expect("first"))?;
-        let rrule = parts
-            .next()
-            .map(|s| Repeat::from_str(s))
-            .transpose()?
-            .map(|r| r.validated_in(&range.start()))
-            .transpose()?;
+        let rrule = parts.next().map(|s| rule(s, &range)).transpose()?;
         Ok(Session { range, rrule })
     }
 }
@@ -75,4 +58,12 @@ impl FromStr for Session {
 /// Formats UTC DateTime to ICS ZULU format with trailing Z
 pub fn ics_format(dt: DateTime<Local>) -> String {
     dt.with_timezone(&Utc).format("%Y%m%dT%H%M%SZ").to_string()
+}
+
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum SessionErr {
+    #[error("Range: {0}")]
+    Range(#[from] RangeErr),
+    #[error("Repeat: {0}")]
+    Repeat(#[from] RepeatErr),
 }

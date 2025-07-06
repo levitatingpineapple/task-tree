@@ -1,88 +1,137 @@
-use super::timestamp::{Ts, TsErr};
-use chrono::{NaiveDate, NaiveDateTime, ParseError};
+use chrono::{
+    DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeZone, Utc,
+    offset::LocalResult,
+};
 use std::{ops, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum Range {
     AllDay(ops::Range<NaiveDate>),
-    Timed(ops::Range<NaiveDateTime>),
+    Timed(ops::Range<DateTime<Local>>),
 }
 
 impl Range {
-    pub fn start(&self) -> Ts {
-        // match self {
-        //     Range::AllDay(nd) => Ts::Date(nd.start),
-        //     Range::Timed(dt) => Ts::Timed(dt.start),
-        // }
-        todo!()
+    pub fn start(&self) -> Bound {
+        match &self {
+            Range::AllDay(range) => Bound::AllDay(range.start),
+            Range::Timed(range) => Bound::Timed(range.start),
+        }
     }
 }
 
 impl FromStr for Range {
     type Err = RangeErr;
 
-    // #[rustfmt::skip]
     fn from_str(str: &str) -> Result<Range, RangeErr> {
         let mut parts = str.splitn(2, "-");
-
-        // Build start
         let start = parts.next().expect("first");
-
-        // Build end
-        let end_part = parts.next().ok_or(RangeErr::MissingEndBound)?;
-        let mut end = start.to_string();
-        end.replace_range(start.len() - end_part.len().., end_part);
-        Ok(if start.contains("_") {
-            Range::Timed(date_time(start)?..date_time(&end)?)
-        } else {
-            Range::AllDay(date(start)?..date(&end)?)
+        let end = &overlay(
+            parts.next().ok_or(RangeErr::MissingEndBound)?,
+            start,
+            Align::Trailing,
+        );
+        let sb = Bound::from_str(start)?;
+        Ok(match sb {
+            Bound::AllDay(nd) => Range::AllDay(not_empty(nd..date(end)?)?),
+            Bound::Timed(dt) => Range::Timed(not_empty(dt..date_time(start)?)?),
         })
     }
 }
 
-fn date_time(str: &str) -> Result<NaiveDateTime, RangeErr> {
-    NaiveDateTime::parse_from_str(
-        &overlay(str, "XX/01/01_00:00:00", false),
-        "%y/%m/%d_%H:%M:%S",
+pub enum Bound {
+    AllDay(NaiveDate),
+    Timed(DateTime<Local>),
+}
+
+impl Bound {
+    pub fn date_time(&self) -> DateTime<rrule::Tz> {
+        match self {
+            Bound::AllDay(nd) => Utc
+                .from_utc_datetime(&nd.and_time(NaiveTime::default()))
+                .with_timezone(&rrule::Tz::UTC),
+            Bound::Timed(dt) => dt.with_timezone(&rrule::Tz::UTC),
+        }
+    }
+}
+
+impl FromStr for Bound {
+    type Err = RangeErr;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        Ok(if str.contains("_") {
+            Bound::Timed(date_time(str)?)
+        } else {
+            Bound::AllDay(date(str)?)
+        })
+    }
+}
+
+fn not_empty<T: PartialOrd>(range: ops::Range<T>) -> Result<ops::Range<T>, RangeErr> {
+    if range.is_empty() {
+        Err(RangeErr::Empty)
+    } else {
+        Ok(range)
+    }
+}
+
+fn date_time(str: &str) -> Result<DateTime<Local>, RangeErr> {
+    local(
+        &NaiveDateTime::parse_from_str(
+            &overlay(str, "XX/01/01_00:00:00", Align::Leading),
+            "%y/%m/%d_%H:%M:%S",
+        )
+        .map_err(RangeErr::Parse)?,
     )
-    .map_err(RangeErr::Parse)
 }
 
 #[rustfmt::skip]
-fn date(string: &str) -> Result<NaiveDate, RangeErr> {
+fn date(str: &str) -> Result<NaiveDate, RangeErr> {
     NaiveDate::parse_from_str(
-        &overlay(string, "XX/01/01", false),
+        &overlay(str, "XX/01/01", Align::Leading),
         "%y/%m/%d"
     )
     .map_err(RangeErr::Parse)
 }
 
-fn overlay(over: &str, base: &str, trailing: bool) -> String {
-    // TODO: Add out of bounds error
-    assert!(base.len() >= over.len());
+enum Align {
+    Leading,
+    Trailing,
+}
+
+fn overlay(over: &str, base: &str, align: Align) -> String {
+    assert!(base.len() >= over.len()); // TODO: Add out of bounds error
     let mut base = base.to_string();
-    if trailing {
-        base.replace_range(base.len() - over.len().., over)
-    } else {
-        base.replace_range(..over.len(), over);
+    match align {
+        Align::Leading => base.replace_range(..over.len(), over),
+        Align::Trailing => base.replace_range(base.len() - over.len().., over),
     }
-    println!("!{}!", base);
     base
+}
+
+/// Interprets `NaiveDateTime` as `Local`.
+/// Throws error if time is ambiguous or invalid due to winter/summer time switch
+fn local(ndt: &NaiveDateTime) -> Result<DateTime<Local>, RangeErr> {
+    match Local.from_local_datetime(ndt) {
+        LocalResult::Single(single) => Ok(single),
+        LocalResult::Ambiguous(_, _) => Err(RangeErr::AmbiguousInTimezone),
+        LocalResult::None => Err(RangeErr::InvalidInTimezone),
+    }
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum RangeErr {
     #[error("Missing end date/time")]
     MissingEndBound,
-    #[error("Timestamp: {0}")]
-    Timestamp(#[from] TsErr),
-    #[error("Mismatch between start and end times")]
-    BoundMismatch,
-    #[error("End before start")]
-    EndBeforeStart,
-
+    // #[error("Timestamp: {0}")]
+    // Timestamp(#[from] TsErr),
+    #[error("Empty or inverse range")]
+    Empty,
     #[error("Time parsing error")]
     Parse(#[from] ParseError),
+    #[error("Ambiguous in timezone")]
+    AmbiguousInTimezone,
+    #[error("Invalid in timezone")]
+    InvalidInTimezone,
 }
 
 #[cfg(test)]
@@ -142,21 +191,10 @@ mod tests {
 
     #[test]
     fn range_from_str_end_before_start() {
-        assert_eq!(
-            "24/10/02-01".parse::<Range>(),
-            Err(RangeErr::EndBeforeStart)
-        );
+        assert_eq!("24/10/02-01".parse::<Range>(), Err(RangeErr::Empty));
         assert_eq!(
             "24/10/02_10:50-09:38".parse::<Range>(),
-            Err(RangeErr::EndBeforeStart)
-        );
-    }
-
-    #[test]
-    fn range_from_str_bound_mismatch() {
-        assert_eq!(
-            "24/10/02-01_23:55".parse::<Range>(),
-            Err(RangeErr::BoundMismatch)
+            Err(RangeErr::Empty)
         );
     }
 
@@ -164,9 +202,9 @@ mod tests {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
     }
 
-    fn date_time(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> NaiveDateTime {
+    fn date_time(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
         let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
         let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
-        NaiveDateTime::new(date, time)
+        local(&NaiveDateTime::new(date, time)).unwrap()
     }
 }
