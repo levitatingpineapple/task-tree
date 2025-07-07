@@ -50,6 +50,7 @@ impl Task {
             }
         }
         task.text = task_text.trim().to_string();
+        println!("{}", task.text);
 
         // Populate child tasks
         if let Some(second_child) = child_iter.next() {

@@ -90,25 +90,13 @@ pub enum ExportErr {
     Group(#[from] crate::group::GroupErr),
 }
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use super::*;
+    use super::*;
 
-//     #[test]
-//     fn test_export() {
-// let mdast = to_mdast(
-//     &read_to_string("/Users/user/notes/plan/todo.md").unwrap(),
-//     &ParseOptions::gfm(),
-// )
-// .unwrap();
-// let group = Group::from_mdast(mdast);
-
-// for a in group.iter() {
-//     println!("{}", a.text)
-// }
-
-// println!("{:#?}", group);
-// export_from(&Path::new("/Users/user/notes/plan/todo.md")).unwrap();
-//     }
-// }
+    #[test]
+    fn export() {
+        export_from(&Path::new("/Users/user/notes/plan/todo.md")).unwrap();
+    }
+}

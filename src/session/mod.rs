@@ -25,10 +25,7 @@ impl Session {
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            Range::Timed(r) => {
-                println!("{:?}", r.start);
-                DtStart::new(ics_format(r.start.clone()))
-            }
+            Range::Timed(r) => DtStart::new(ics_format(r.start.clone())),
         }
     }
 
