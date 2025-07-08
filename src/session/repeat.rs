@@ -75,7 +75,7 @@ mod tests {
         )
     }
     /// These tests could also break due to implementation details in rrule crate.
-    /// Ideally the field order should not matter
+    /// In that case update tests, so the rule order does not matter
     fn rule_test(str: &str, rrule: &str) -> Result<(), RepeatErr> {
         unsafe {
             // Override local timezone to UTC

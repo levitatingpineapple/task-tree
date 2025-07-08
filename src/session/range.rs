@@ -1,8 +1,12 @@
 use chrono::{
-    DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeZone, Utc,
-    offset::LocalResult,
+    DateTime, Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeZone, Timelike,
+    Utc, offset::LocalResult,
 };
-use std::{ops, str::FromStr};
+use std::{
+    fmt::{self, Display, Formatter},
+    ops::{self},
+    str::FromStr,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum Range {
@@ -15,6 +19,13 @@ impl Range {
         match &self {
             Range::AllDay(range) => Bound::AllDay(range.start),
             Range::Timed(range) => Bound::Timed(range.start),
+        }
+    }
+
+    pub fn end(&self) -> Bound {
+        match &self {
+            Range::AllDay(range) => Bound::AllDay(range.end),
+            Range::Timed(range) => Bound::Timed(range.end),
         }
     }
 }
@@ -49,19 +60,76 @@ impl FromStr for Range {
     }
 }
 
+impl Display for Range {
+    /// Both `start` and `end` bounds are dependent on one-another
+    /// - `start`
+    ///   - Prefix -> year
+    ///   - Suffix
+    ///     - `AllDay` -> last non-default *start and end* trailing component.
+    ///     - `Timed` -> same but start from `%h` hours
+    /// - `end`
+    ///   - Prefix -> first non-matching *start and end* leading component
+    ///   - Suffix -> same as start
+    #[allow(unused_variables)]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let separators: Vec<char> = vec!['/', '/', '_', ':', ':'];
+        let defaults: Vec<u32> = vec![1, 1, 1, 0, 0, 0];
+        let sc = self.start().components();
+        let ec = self.end().components();
+        let mut suffix = defaults
+            .iter()
+            .zip(sc.iter().zip(ec.iter()))
+            .rposition(|(d, (s, e))| d != s || d != e)
+            .unwrap();
+        suffix = match self {
+            Range::AllDay(_) => suffix,
+            Range::Timed(_) => std::cmp::max(suffix, 3),
+        };
+        let prefix = sc.iter().zip(ec.iter()).position(|(s, e)| s != e).unwrap();
+        write(f, sc, 0..=suffix)?;
+        write!(f, "-")?;
+        write(f, ec, prefix..=suffix)
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Bound {
     AllDay(NaiveDate),
     Timed(DateTime<Local>),
 }
 
-/// Represent start or end bound of the time `Range`
+/// Represents start or end bound of the time `Range`
+/// Time is interpreted and valid in system's local timezone
+/// String representation trims trailing suffix with default values
 impl Bound {
+    /// Returns time in UTC timezone
     pub fn date_time(&self) -> DateTime<rrule::Tz> {
         match self {
             Bound::AllDay(nd) => Utc
                 .from_utc_datetime(&nd.and_time(NaiveTime::default()))
                 .with_timezone(&rrule::Tz::UTC),
             Bound::Timed(dt) => dt.with_timezone(&rrule::Tz::UTC),
+        }
+    }
+
+    /// Returns time bound components as a vector.
+    /// Used for trimming default suffix or common prefix
+    /// in `Range`s `Display` implementation
+    pub fn components(&self) -> Vec<u32> {
+        match &self {
+            Bound::AllDay(nd) => vec![
+                nd.year().try_into().expect("B.C. not supported"),
+                nd.month(),
+                nd.day(),
+            ],
+            Bound::Timed(dt) => vec![
+                dt.year().try_into().expect("B.C. not supported"),
+                dt.month(),
+                dt.day(),
+                dt.hour(),
+                dt.minute(),
+                dt.second(),
+            ],
         }
     }
 }
@@ -78,11 +146,68 @@ impl FromStr for Bound {
     }
 }
 
+impl Display for Bound {
+    /// Only used to render repeat-rule
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn date_time_format(dt: &DateTime<Local>) -> &'static str {
+            if dt.second() != 0 { return "%y/%m/%d_%H:%M:%S"; }
+            if dt.minute() != 0 { return "%y/%m/%d_%H:%M"; }
+            if dt.hour()   != 0 { return "%y/%m/%d_%H"; }
+            date_format(dt)
+        }
+        fn date_format<T: Datelike>(date: &T) -> &'static str {
+            if date.day()   != 1 { return "%y/%m/%d"; }
+            if date.month() != 1 { return "%y/%m"; }
+                                   return "%y";
+        }
+        write!(
+            f,
+            "{}",
+            match &self {
+                Bound::AllDay(nd) => nd.format(date_format(nd)),
+                Bound::Timed(dt) => dt.format(date_time_format(dt)),
+            }
+        )
+    }
+}
+
+/// Writes a range of bound components with provided formatter
+/// Due to many range combinations this would be verbose to
+/// implement in a type-safe way.
+/// Expects 3 (AllDay) or 6 (Timed) components and range
+/// within the bounds of the `components`
+fn write(
+    f: &mut Formatter<'_>,
+    components: Vec<u32>,
+    range: ops::RangeInclusive<usize>,
+) -> fmt::Result {
+    // Sanity check
+    debug_assert!([3usize, 6usize].contains(&components.len()));
+    debug_assert!(range.start() <= &components.len() && range.end() <= &components.len());
+    let separators: Vec<char> = vec!['/', '/', '_', ':', ':'];
+    let s = range.start().clone();
+    for i in range {
+        if i != s {
+            write!(f, "{}", separators[i - 1])?; // leading separator
+        }
+        if i > 0 {
+            write!(f, "{:02}", components[i])?; // other components
+        } else {
+            // NOTE: Events before 2000 not supported and will panic
+            write!(f, "{:02}", components[i] - 2000)? // year
+        }
+    }
+    Ok(())
+}
+
+/// Parses date time with omitted default suffix
 fn date_time(str: &str) -> Result<DateTime<Local>, RangeErr> {
     let overlay = overlay(str, "XX/01/01_00:00:00", Align::Leading);
     local(&NaiveDateTime::parse_from_str(&overlay?, "%y/%m/%d_%H:%M:%S").map_err(RangeErr::Parse)?)
 }
 
+/// Parses date with omitted default suffix
 fn date(str: &str) -> Result<NaiveDate, RangeErr> {
     let overlay = overlay(str, "XX/01/01", Align::Leading);
     NaiveDate::parse_from_str(&overlay?, "%y/%m/%d").map_err(RangeErr::Parse)
@@ -140,101 +265,114 @@ mod tests {
     use chrono::{NaiveDate, NaiveTime};
 
     #[test]
-    fn all_day_partial() {
-        let start = date(2024, 12, 2);
-        let end = date(2024, 12, 8);
-        assert_eq!(
-            "24/12/02-08".parse::<Range>(),
-            Ok(Range::AllDay(start..end))
+    #[rustfmt::skip]
+    fn range_display() {
+        test(
+            "25/08-09",
+            Range::AllDay(d(2025, 8, 1)..d(2025, 9, 1))
         );
+        test(
+            "25/01/28-30",
+            Range::AllDay(d(2025, 1, 28)..d(2025, 1, 30))
+        );
+        test(
+            "25-28",
+            Range::AllDay(d(2025, 1, 1)..d(2028, 1, 1))
+        );
+        test(
+            "25/08/01_17-18",
+            Range::Timed(dt(2025, 8, 1, 17, 0, 0)..dt(2025, 8, 1, 18, 0, 0))
+        );
+        test(
+            "25/03/02_15:45-04/01_11:46",
+            Range::Timed(dt(2025, 3, 2, 15, 45, 00)..dt(2025, 4, 1, 11, 46, 00))
+        );
+
+        fn test(str: &str, range: Range) {
+            assert_eq!(&range.to_string(), str);
+            assert_eq!(Range::from_str(str), Ok(range));
+        }
     }
 
     #[test]
-    fn all_day_full() {
-        let start = date(2024, 12, 31);
-        let end = date(2025, 1, 2);
-        assert_eq!(
-            "24/12/31-25/01/02".parse::<Range>(),
-            Ok(Range::AllDay(start..end))
+    #[rustfmt::skip]
+    fn bound_display() {
+        test(
+            "25/07/31_19:45:58",
+            Bound::Timed(dt(2025, 07, 31, 19, 45, 58))
         );
+        test(
+            "25/07/31_19:45",
+            Bound::Timed(dt(2025, 07, 31, 19, 45, 00))
+        );
+        test(
+            "25/07/31_19",
+            Bound::Timed(dt(2025, 07, 31, 19, 00, 00))
+        );
+        test(
+            "25/01/31",
+            Bound::AllDay(d(2025, 01, 31))
+        );
+        test(
+            "25/07",
+            Bound::AllDay(d(2025, 07, 01))
+        );
+        test(
+            "25",
+            Bound::AllDay(d(2025, 01, 01))
+        );
+
+        fn test(str: &str, bound: Bound) {
+            assert_eq!(&bound.to_string(), str);
+            assert_eq!(Bound::from_str(str), Ok(bound));
+        }
     }
 
     #[test]
-    fn timed_partial() {
-        let start = date_time(2024, 10, 2, 10, 30, 0);
-        let end = date_time(2024, 10, 2, 15, 45, 0);
-        assert_eq!(
-            "24/10/02_10:30-15:45".parse::<Range>(),
-            Ok(Range::Timed(start..end))
-        );
+    fn range_error() {
+        unsafe {
+            // Override system timezone
+            std::env::set_var("TZ", "America/New_York");
+        }
+        test("25/07/08", RangeErr::MissingEndBound);
+        test("25/07/08-07", RangeErr::Empty);
+        test("25/03/09_02:30-40", RangeErr::InvalidInTimezone);
+        test("25/11/02_01:30-40", RangeErr::AmbiguousInTimezone);
+
+        fn test(str: &str, err: RangeErr) {
+            assert_eq!(Range::from_str(str), Err(err));
+        }
     }
 
     #[test]
-    fn timed_hours() {
-        let start = date_time(2024, 10, 2, 10, 0, 0);
-        let end = date_time(2024, 10, 2, 15, 0, 0);
-        assert_eq!(
-            "24/10/02_10-15".parse::<Range>(),
-            Ok(Range::Timed(start..end))
-        );
-    }
-
-    #[test]
-    fn end_before_start() {
-        assert_eq!("24/10/02-01".parse::<Range>(), Err(RangeErr::Empty));
-        assert_eq!(
-            "24/10/02_10:50-09:38".parse::<Range>(),
-            Err(RangeErr::Empty)
-        );
-    }
-
-    #[test]
-    fn timed_full() {
-        let start = date_time(2024, 12, 31, 10, 30, 0);
-        let end = date_time(2025, 1, 2, 15, 45, 0);
-        assert_eq!(
-            "24/12/31_10:30-25/01/02_15:45".parse(),
-            Ok(Range::Timed(start..end))
-        );
-    }
-
-    #[test]
-    fn overlay_leading() {
+    fn string_overlay() {
         assert_eq!(
             overlay("abc", "123456", Align::Leading),
             Ok("abc456".to_string())
         );
-    }
-
-    #[test]
-    fn overlay_trailing() {
         assert_eq!(
             overlay("abc", "123456", Align::Trailing),
             Ok("123abc".to_string())
         );
-    }
-
-    #[test]
-    fn overlay_too_same_length() {
         assert_eq!(
             overlay("hello", "world", Align::Leading),
             Ok("hello".to_string())
         );
-    }
-
-    #[test]
-    fn overlay_too_long_error() {
         assert_eq!(
             overlay("toolong", "short", Align::Leading),
             Err(RangeErr::TooLong)
         );
     }
 
-    fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+    fn d(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
     }
 
-    fn date_time(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
+    fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
+        unsafe {
+            // Override system timezone
+            std::env::set_var("TZ", "UTC");
+        }
         let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
         let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
         local(&NaiveDateTime::new(date, time)).unwrap()
