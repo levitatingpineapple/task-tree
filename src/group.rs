@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use crate::{
     nested::NestedIter,
     task::{Task, TaskErr},
@@ -12,6 +14,7 @@ pub struct Group {
 }
 
 impl Group {
+    /// Creates root group from markdown abstract syntax tree
     pub fn from_mdast(mdast: Node) -> Result<Self, GroupErr> {
         let mut root = Group::new("Root");
 
@@ -25,7 +28,7 @@ impl Group {
                         foo.children.push(Group::new(child.to_string()));
                     }
                     Node::List(list) => {
-                        let tasks = Task::tasks(list)?;
+                        let tasks = Task::new_tasks(list)?;
                         root.last_added().tasks = tasks;
                     }
                     _ => { /* Ignore other node types */ }
@@ -35,6 +38,7 @@ impl Group {
         Ok(root)
     }
 
+    /// Creates an empty group with a name
     pub fn new<S: Into<String>>(text: S) -> Self {
         Group {
             text: text.into(),
@@ -59,6 +63,27 @@ impl Group {
             // Unwrap required due to borrow checker..
             self.children.last_mut().unwrap().last_added()
         }
+    }
+
+    fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
+        if level > 0 {
+            write!(f, "{} {}\n\n", "#".repeat(level), self.text)?;
+        }
+        for task in &self.tasks {
+            write!(f, "{}", task)?;
+        }
+        write!(f, "\n")?;
+        for child in &self.children {
+            child.fmt_recursive(f, level + 1)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for Group {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        // Headings start at level 1 with 0 being file itself
+        self.fmt_recursive(f, 0)
     }
 }
 

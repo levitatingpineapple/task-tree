@@ -28,8 +28,12 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let dtstamp = session::ics_format(now);
 
     for group_path in root_group.nested_iter() {
-        let iter = group_path.leaf.tasks.iter();
-        for task_path in iter.flat_map(|task| task.nested_iter()) {
+        for task_path in group_path
+            .leaf
+            .tasks
+            .iter()
+            .flat_map(|task| task.nested_iter())
+        {
             for (index, session) in task_path.leaf.sessions.iter().enumerate() {
                 let id = event_id(&group_path, &task_path, index);
                 let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
@@ -41,14 +45,13 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
                 // setting sequence number to current unix timestamp
                 // allows updating events wihout retaining any state
                 event.push(Sequence::new(now.timestamp().to_string()));
-                if let Some(rrule) = &session.rrule {
+                if let Some(rrule) = &session.repeat {
                     event.push(RRule::new(rrule.to_string()));
                 }
                 calendar.add_event(event);
             }
         }
     }
-
     let ics_path = home_dir()
         .ok_or(ExportErr::MissingHome)?
         .join(".cache/task-tree/todo.ics");
@@ -98,5 +101,17 @@ mod tests {
     #[test]
     fn export() {
         export_from(&Path::new("/Users/user/notes/plan/todo.md")).unwrap();
+        //
+        //
+        // let path = Path::new("/Users/user/notes/plan/todo.md");
+        // let markdown = read_to_string(&path).unwrap();
+        // let mdast = to_mdast(&markdown, &ParseOptions::gfm())
+        //     .map_err(ExportErr::Markdown)
+        //     .unwrap();
+        // let root_group = Group::from_mdast(mdast).unwrap();
+
+        // let string = root_group.to_string();
+        // println!("-----------------------------------------------------------------");
+        // println!("{}", string);
     }
 }

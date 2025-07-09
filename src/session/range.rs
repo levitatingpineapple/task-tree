@@ -146,32 +146,6 @@ impl FromStr for Bound {
     }
 }
 
-impl Display for Bound {
-    /// Only used to render repeat-rule
-    #[rustfmt::skip]
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        fn date_time_format(dt: &DateTime<Local>) -> &'static str {
-            if dt.second() != 0 { return "%y/%m/%d_%H:%M:%S"; }
-            if dt.minute() != 0 { return "%y/%m/%d_%H:%M"; }
-            if dt.hour()   != 0 { return "%y/%m/%d_%H"; }
-            date_format(dt)
-        }
-        fn date_format<T: Datelike>(date: &T) -> &'static str {
-            if date.day()   != 1 { return "%y/%m/%d"; }
-            if date.month() != 1 { return "%y/%m"; }
-                                   return "%y";
-        }
-        write!(
-            f,
-            "{}",
-            match &self {
-                Bound::AllDay(nd) => nd.format(date_format(nd)),
-                Bound::Timed(dt) => dt.format(date_time_format(dt)),
-            }
-        )
-    }
-}
-
 /// Writes a range of bound components with provided formatter
 /// Due to many range combinations this would be verbose to
 /// implement in a type-safe way.
@@ -263,10 +237,15 @@ pub enum RangeErr {
 mod tests {
     use super::*;
     use chrono::{NaiveDate, NaiveTime};
+    use serial_test::serial;
 
     #[test]
     #[rustfmt::skip]
+    #[serial] // All timezone tests should be serial
     fn range_display() {
+        unsafe {
+            std::env::set_var("TZ", "UTC");
+        }
         test(
             "25/08-09",
             Range::AllDay(d(2025, 8, 1)..d(2025, 9, 1))
@@ -292,46 +271,22 @@ mod tests {
             assert_eq!(&range.to_string(), str);
             assert_eq!(Range::from_str(str), Ok(range));
         }
-    }
 
-    #[test]
-    #[rustfmt::skip]
-    fn bound_display() {
-        test(
-            "25/07/31_19:45:58",
-            Bound::Timed(dt(2025, 07, 31, 19, 45, 58))
-        );
-        test(
-            "25/07/31_19:45",
-            Bound::Timed(dt(2025, 07, 31, 19, 45, 00))
-        );
-        test(
-            "25/07/31_19",
-            Bound::Timed(dt(2025, 07, 31, 19, 00, 00))
-        );
-        test(
-            "25/01/31",
-            Bound::AllDay(d(2025, 01, 31))
-        );
-        test(
-            "25/07",
-            Bound::AllDay(d(2025, 07, 01))
-        );
-        test(
-            "25",
-            Bound::AllDay(d(2025, 01, 01))
-        );
+        fn d(y: i32, m: u32, d: u32) -> NaiveDate {
+            NaiveDate::from_ymd_opt(y, m, d).unwrap()
+        }
 
-        fn test(str: &str, bound: Bound) {
-            assert_eq!(&bound.to_string(), str);
-            assert_eq!(Bound::from_str(str), Ok(bound));
+        fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
+            let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
+            let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
+            local(&NaiveDateTime::new(date, time)).unwrap()
         }
     }
 
     #[test]
+    #[serial]
     fn range_error() {
         unsafe {
-            // Override system timezone
             std::env::set_var("TZ", "America/New_York");
         }
         test("25/07/08", RangeErr::MissingEndBound);
@@ -362,19 +317,5 @@ mod tests {
             overlay("toolong", "short", Align::Leading),
             Err(RangeErr::TooLong)
         );
-    }
-
-    fn d(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
-    }
-
-    fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
-        unsafe {
-            // Override system timezone
-            std::env::set_var("TZ", "UTC");
-        }
-        let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
-        let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
-        local(&NaiveDateTime::new(date, time)).unwrap()
     }
 }

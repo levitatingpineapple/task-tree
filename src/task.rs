@@ -3,7 +3,10 @@ use crate::{
     session::{Session, SessionErr},
 };
 use markdown::mdast::{List, ListItem, Node};
-use std::str::FromStr;
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Task {
@@ -14,18 +17,8 @@ pub struct Task {
 }
 
 impl Task {
-    pub fn tasks(list: &List) -> Result<Vec<Task>, TaskErr> {
-        list.children
-            .iter()
-            .map(|child| match child {
-                Node::ListItem(item) => Task::new(item),
-                _ => Err(TaskErr::NotListItem),
-            })
-            .collect()
-    }
-
     /// Creates task from markdown list item
-    /// Any code blocks must be decodable to a session
+    /// Any code blocks expected to be decodable to a `Session`
     pub fn new(list_item: &ListItem) -> Result<Task, TaskErr> {
         let mut child_iter = list_item.children.iter();
         let first_child = child_iter.next().ok_or(TaskErr::EmptyListItem)?;
@@ -38,30 +31,59 @@ impl Task {
             done: list_item.checked,
             ..Default::default()
         };
-        let mut task_text = String::new();
-
-        // Collect description TODO: Should this be handled by the UTIL?
+        // Populate text and sessions
         for child in &paragraph.children {
             if let Node::InlineCode(inline_code) = child {
                 task.sessions
                     .push(Session::from_str(&inline_code.value).map_err(TaskErr::Session)?);
             } else {
-                task_text.push_str(&child.to_string());
+                task.text.push_str(&child.to_string());
             }
         }
-        task.text = task_text.trim().to_string();
-        println!("{}", task.text);
-
+        // TODO: Handle long task text line-breaks
+        task.text = task.text.trim().to_string();
         // Populate child tasks
         if let Some(second_child) = child_iter.next() {
             if let Node::List(list) = second_child {
-                task.children = Task::tasks(list)?
+                task.children = Task::new_tasks(list)?
             } else {
                 return Err(TaskErr::NotList);
             };
         }
-
         Ok(task)
+    }
+
+    /// Given a markdown list - returns a vector or tasks
+    pub fn new_tasks(list: &List) -> Result<Vec<Task>, TaskErr> {
+        list.children
+            .iter()
+            .map(|child| match child {
+                Node::ListItem(item) => Task::new(item),
+                _ => Err(TaskErr::NotListItem),
+            })
+            .collect()
+    }
+
+    fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
+        write!(f, "{}-", "  ".repeat(level))?;
+        if let Some(done) = self.done {
+            write!(f, " [{}]", if done { 'x' } else { ' ' })?;
+        }
+        write!(f, " {}", self.text)?;
+        for session in &self.sessions {
+            write!(f, " `{}`", session)?;
+        }
+        write!(f, "\n")?;
+        for child in &self.children {
+            child.fmt_recursive(f, level + 1)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for Task {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.fmt_recursive(f, 0)
     }
 }
 

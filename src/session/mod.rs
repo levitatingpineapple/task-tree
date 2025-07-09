@@ -7,14 +7,13 @@ use ics::{
     properties::{DtEnd, DtStart},
 };
 use range::{Range, RangeErr};
-use repeat::{RepeatErr, rule};
-use rrule::RRule;
-use std::str::FromStr;
+use repeat::{Repeat, RepeatErr};
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
     pub range: Range,
-    pub rrule: Option<RRule>,
+    pub repeat: Option<Repeat>,
 }
 
 impl Session {
@@ -47,8 +46,24 @@ impl FromStr for Session {
     fn from_str(str: &str) -> Result<Session, SessionErr> {
         let mut parts = str.splitn(2, "|");
         let range = Range::from_str(parts.next().expect("first"))?;
-        let rrule = parts.next().map(|s| rule(s, &range)).transpose()?;
-        Ok(Session { range, rrule })
+        let rrule = parts
+            .next()
+            .map(|s| Repeat::from_str_in_range(s, &range))
+            .transpose()?;
+        Ok(Session {
+            range,
+            repeat: rrule,
+        })
+    }
+}
+
+impl Display for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.range)?;
+        if let Some(repeat) = &self.repeat {
+            write!(f, "|{}", repeat)?;
+        }
+        Ok(())
     }
 }
 
@@ -63,4 +78,17 @@ pub enum SessionErr {
     Range(#[from] RangeErr),
     #[error("Repeat: {0}")]
     Repeat(#[from] RepeatErr),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_parsing() -> Result<(), SessionErr> {
+        let str = "25/08/22-25|monthly";
+        let session = Session::from_str(str)?;
+        assert_eq!(str, session.to_string());
+        Ok(())
+    }
 }

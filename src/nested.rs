@@ -51,39 +51,9 @@ impl<'a, T: NestedIter> Iterator for DFI<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt;
-
-    use indoc::indoc;
-
     use super::*;
-
-    struct Node {
-        text: String,
-        children: Vec<Node>,
-    }
-
-    impl NestedIter for Node {
-        fn children(&self) -> &Vec<Self> {
-            &self.children
-        }
-    }
-
-    impl fmt::Display for super::Path<'_, Node> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            for parent in self.parents.iter() {
-                write!(f, "{}->", parent.text)?;
-            }
-            write!(f, "[{}]", self.leaf.text)?;
-            Ok(())
-        }
-    }
-
-    fn node(text: &str, children: Vec<Node>) -> Node {
-        Node {
-            text: text.to_string(),
-            children,
-        }
-    }
+    use indoc::indoc;
+    use std::fmt;
 
     #[test]
     fn iterator() {
@@ -117,5 +87,33 @@ mod tests {
             Root->[Bar]
         "};
         assert_eq!(expectation, display);
+    }
+
+    struct Node {
+        text: String,
+        children: Vec<Node>,
+    }
+
+    impl NestedIter for Node {
+        fn children(&self) -> &Vec<Self> {
+            &self.children
+        }
+    }
+
+    impl fmt::Display for super::Path<'_, Node> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for parent in self.parents.iter() {
+                write!(f, "{}->", parent.text)?;
+            }
+            write!(f, "[{}]", self.leaf.text)?;
+            Ok(())
+        }
+    }
+
+    fn node(text: &str, children: Vec<Node>) -> Node {
+        Node {
+            text: text.to_string(),
+            children,
+        }
     }
 }
