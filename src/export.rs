@@ -96,22 +96,30 @@ pub enum ExportErr {
 #[cfg(test)]
 mod tests {
 
+    use crate::task;
+
     use super::*;
 
     #[test]
-    fn export() {
-        export_from(&Path::new("/Users/user/notes/plan/todo.md")).unwrap();
-        //
-        //
-        // let path = Path::new("/Users/user/notes/plan/todo.md");
-        // let markdown = read_to_string(&path).unwrap();
-        // let mdast = to_mdast(&markdown, &ParseOptions::gfm())
-        //     .map_err(ExportErr::Markdown)
-        //     .unwrap();
-        // let root_group = Group::from_mdast(mdast).unwrap();
+    fn display() {
+        let path = Path::new("/Users/user/notes/plan/todo.md");
+        let markdown = read_to_string(&path).unwrap();
+        let mdast = to_mdast(&markdown, &ParseOptions::gfm())
+            .map_err(ExportErr::Markdown)
+            .unwrap();
+        let mut root = Group::from_mdast(mdast).unwrap();
+        let mut extracted = Vec::<(Task, task::Context)>::new();
+        root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
 
-        // let string = root_group.to_string();
-        // println!("-----------------------------------------------------------------");
-        // println!("{}", string);
+        let string = root.to_string();
+        println!("-----------------------------------------------------------------");
+        println!("{}", string);
+
+        println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+        for (task, context) in extracted {
+            println!("CONTEXT::{:?}", context);
+            println!("TASK::{}", task);
+            println!("~~~~~~~~~")
+        }
     }
 }

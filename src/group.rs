@@ -2,14 +2,14 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{
     nested::NestedIter,
-    task::{Task, TaskErr},
+    task::{self, Task, TaskErr},
 };
 use markdown::mdast::Node;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Group {
     pub text: String,
-    pub children: Vec<Group>,
+    pub sub_groups: Vec<Group>,
     pub tasks: Vec<Task>,
 }
 
@@ -25,7 +25,7 @@ impl Group {
                         let foo = root
                             .last_sub(heading.depth - 1)
                             .ok_or(GroupErr::HeadingOrder)?;
-                        foo.children.push(Group::new(child.to_string()));
+                        foo.sub_groups.push(Group::new(child.to_string()));
                     }
                     Node::List(list) => {
                         let tasks = Task::new_tasks(list)?;
@@ -39,11 +39,15 @@ impl Group {
     }
 
     /// Creates an empty group with a name
-    pub fn new<S: Into<String>>(text: S) -> Self {
+    fn new<S: Into<String>>(text: S) -> Self {
         Group {
             text: text.into(),
             ..Default::default()
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sub_groups.is_empty() && self.tasks.is_empty()
     }
 
     /// Returns last subcategory at some level
@@ -51,17 +55,17 @@ impl Group {
         if depth == 0 {
             Some(self)
         } else {
-            self.children.last_mut().map(|s| s.last_sub(depth - 1))?
+            self.sub_groups.last_mut().map(|s| s.last_sub(depth - 1))?
         }
     }
 
     /// Assuming tree is built depth-first returns last added element
     fn last_added(&mut self) -> &mut Group {
-        if self.children.is_empty() {
+        if self.sub_groups.is_empty() {
             self
         } else {
             // Unwrap required due to borrow checker..
-            self.children.last_mut().unwrap().last_added()
+            self.sub_groups.last_mut().unwrap().last_added()
         }
     }
 
@@ -73,7 +77,7 @@ impl Group {
             write!(f, "{}", task)?;
         }
         write!(f, "\n")?;
-        for child in &self.children {
+        for child in &self.sub_groups {
             child.fmt_recursive(f, level + 1)?;
         }
         Ok(())
@@ -89,7 +93,7 @@ impl Display for Group {
 
 impl NestedIter for Group {
     fn children(&self) -> &Vec<Self> {
-        &self.children
+        &self.sub_groups
     }
 }
 
@@ -102,3 +106,40 @@ pub enum GroupErr {
 }
 
 // TODO: Add heading tests
+
+impl Group {
+    pub fn extract_completed_tasks<F: FnMut(Task, &task::Context)>(&mut self, callback: &mut F) {
+        let mut context = task::Context::default();
+        self.ect(&mut context, callback, true);
+    }
+
+    fn ect<F: FnMut(Task, &task::Context)>(
+        &mut self,
+        context: &mut task::Context,
+        callback: &mut F,
+        root: bool,
+    ) {
+        // Exclude root node from he context.
+        if !root {
+            context.groups.push(self.text.clone());
+        }
+        // Extract all root tasks
+        for task in self.tasks.extract_if(.., |t| t.done == Some(true)) {
+            callback(task, context);
+        }
+        // Recurse into child tasks
+        for task in self.tasks.iter_mut() {
+            task.extract_completed(context, callback);
+        }
+        // Repeat for all children - discarding the empty ones
+        self.sub_groups.retain_mut(|child| {
+            child.ect(context, callback, false);
+            !child.is_empty()
+        });
+        context.groups.pop();
+    }
+
+    pub fn insert_task(task: Task, context: &task::Context) {
+        todo!()
+    }
+}

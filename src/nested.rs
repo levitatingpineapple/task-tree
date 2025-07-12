@@ -6,7 +6,7 @@ pub trait NestedIter: Sized {
     /// Nested iterator is a depth-first iterator that
     /// visits all nodes while prividing full path to parent nodes
     /// Parents are ordered starting from root
-    fn nested_iter(&self) -> DFI<Self> {
+    fn nested_iter(&self) -> DFI<'_, Self> {
         DFI {
             nodes: vec![],
             iterators: vec![from_ref(self).iter()],

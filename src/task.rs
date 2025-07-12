@@ -13,7 +13,7 @@ pub struct Task {
     pub done: Option<bool>,
     pub text: String,
     pub sessions: Vec<Session>,
-    pub children: Vec<Task>,
+    pub sub_tasks: Vec<Task>,
 }
 
 impl Task {
@@ -45,7 +45,7 @@ impl Task {
         // Populate child tasks
         if let Some(second_child) = child_iter.next() {
             if let Node::List(list) = second_child {
-                task.children = Task::new_tasks(list)?
+                task.sub_tasks = Task::new_tasks(list)?
             } else {
                 return Err(TaskErr::NotList);
             };
@@ -64,6 +64,21 @@ impl Task {
             .collect()
     }
 
+    pub fn extract_completed<F: FnMut(Task, &Context)>(
+        &mut self,
+        context: &mut Context,
+        callback: &mut F,
+    ) {
+        context.tasks.push(self.text.clone());
+        for child in self.sub_tasks.extract_if(.., |c| c.done == Some(true)) {
+            callback(child, context);
+        }
+        for child in &mut self.sub_tasks {
+            child.extract_completed(context, callback);
+        }
+        context.tasks.pop();
+    }
+
     fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         write!(f, "{}-", "  ".repeat(level))?;
         if let Some(done) = self.done {
@@ -74,7 +89,7 @@ impl Task {
             write!(f, " `{}`", session)?;
         }
         write!(f, "\n")?;
-        for child in &self.children {
+        for child in &self.sub_tasks {
             child.fmt_recursive(f, level + 1)?;
         }
         Ok(())
@@ -89,8 +104,14 @@ impl Display for Task {
 
 impl NestedIter for Task {
     fn children(&self) -> &Vec<Self> {
-        &self.children
+        &self.sub_tasks
     }
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct Context {
+    pub groups: Vec<String>,
+    pub tasks: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]
@@ -141,7 +162,7 @@ mod tests {
                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
             ],
-            children: vec![],
+            sub_tasks: vec![],
         };
         assert_eq!(Task::new(&li), Ok(task));
     }
