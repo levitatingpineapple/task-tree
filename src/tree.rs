@@ -12,7 +12,7 @@ use std::slice::Iter;
 pub trait Root<C: Child>: Sized {
     fn children(&self) -> &Vec<C>;
 
-    fn nested_iter(&self) -> DepthFirstIterator<'_, C> {
+    fn iter(&self) -> DepthFirstIterator<'_, C> {
         DepthFirstIterator {
             children: vec![],
             iterators: vec![],
@@ -20,7 +20,7 @@ pub trait Root<C: Child>: Sized {
     }
 }
 
-// Any child node is root of itself
+// `Root<Self>` -> Any child node is root of itself
 pub trait Child: Sized + Root<Self> {
     type Id: Hash + Clone;
 
@@ -28,8 +28,7 @@ pub trait Child: Sized + Root<Self> {
 }
 
 // MARK: Depth First Iterator
-
-pub struct IteratorItem<'a, C: Child> {
+pub struct Item<'a, C: Child> {
     pub child: &'a C,
     pub path: Vec<C::Id>,
 }
@@ -40,12 +39,12 @@ pub struct DepthFirstIterator<'a, C: Child> {
 }
 
 impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
-    type Item = IteratorItem<'a, C>;
+    type Item = Item<'a, C>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(iterator) = self.iterators.last_mut() {
             if let Some(child) = iterator.next() {
-                let item = IteratorItem {
+                let item = Item {
                     child,
                     path: self.children.clone(),
                 };
@@ -70,68 +69,94 @@ mod tests {
     use indoc::indoc;
     use std::fmt;
 
-    struct SampleRoot {
-        children: Vec<SampleChild>,
+    struct TR {
+        children: Vec<TC>,
     }
 
-    impl Root<SampleChild> for SampleRoot {
-        fn children(&self) -> &Vec<SampleChild> {
+    impl Root<TC> for TR {
+        fn children(&self) -> &Vec<TC> {
             &self.children
         }
     }
 
-    struct SampleChild {
-        id: u64,
+    struct TC {
+        id: &'static str,
         children: Vec<Self>,
     }
 
-    impl Child for SampleChild {
-        type Id = u64;
+    fn tc(id: &'static str) -> TC {
+        tcc(id, vec![])
+    }
+
+    fn tcc(id: &'static str, children: Vec<TC>) -> TC {
+        TC { id, children }
+    }
+
+    impl Child for TC {
+        type Id = &'static str;
 
         fn id(&self) -> Self::Id {
-            0
+            self.id
         }
     }
 
-    impl Root<Self> for SampleChild {
+    impl Root<Self> for TC {
         fn children(&self) -> &Vec<Self> {
             &self.children
         }
     }
 
-    // #[test]
-    // fn iterator() {
-    //     #[rustfmt::skip]
-    //     let tree = node("Root", vec![
-    //         node("Foo", vec![
-    //             node("FooA", vec![
-    //                 node("FooA1", vec![]),
-    //                 node("FooA2", vec![]),
-    //             ]),
-    //             node("FooB", vec![
-    //                 node("FooB1", vec![]),
-    //             ]),
-    //         ]),
-    //         node("Bar", vec![]),
-    //     ]);
-    //     let display = tree
-    //         .nested_iter()
-    //         .map(|n| n.to_string())
-    //         .collect::<Vec<String>>()
-    //         .join("\n")
-    //         + "\n";
-    //     let expectation = indoc! {"
-    //         [Root]
-    //         Root->[Foo]
-    //         Root->Foo->[FooA]
-    //         Root->Foo->FooA->[FooA1]
-    //         Root->Foo->FooA->[FooA2]
-    //         Root->Foo->[FooB]
-    //         Root->Foo->FooB->[FooB1]
-    //         Root->[Bar]
-    //     "};
-    //     assert_eq!(expectation, display);
-    // }
+    #[test]
+    fn iterator() {
+        #[rustfmt::skip]
+        let root = TR {
+            children: vec![
+                tc("0"),
+                tcc("1", vec![
+                    tc("1.0"),
+                    tc("1.1")
+                ])
+            ]
+        };
+
+        let string = root
+            .iter()
+            .map(|c| format!("{}", c))
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        println!("{}", string);
+
+        // let tree = node("Root", vec![
+        //     node("Foo", vec![
+        //         node("FooA", vec![
+        //             node("FooA1", vec![]),
+        //             node("FooA2", vec![]),
+        //         ]),
+        //         node("FooB", vec![
+        //             node("FooB1", vec![]),
+        //         ]),
+        //     ]),
+        //     node("Bar", vec![]),
+        // ]);
+        // let display = tree
+        //     .nested_iter()
+        //     .map(|n| n.to_string())
+        //     .collect::<Vec<String>>()
+        //     .join("\n")
+        //     + "\n";
+        // let expectation = indoc! {"
+        //     [Root]
+        //     Root->[Foo]
+        //     Root->Foo->[FooA]
+        //     Root->Foo->FooA->[FooA1]
+        //     Root->Foo->FooA->[FooA2]
+        //     Root->Foo->[FooB]
+        //     Root->Foo->FooB->[FooB1]
+        //     Root->[Bar]
+        // "};
+        // assert_eq!(expectation, display);
+    }
 
     // impl NestedIter for Node {
     //     fn children(&self) -> &Vec<Self> {
@@ -139,20 +164,17 @@ mod tests {
     //     }
     // }
 
-    // impl fmt::Display for super::Path<'_, Node> {
-    //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //         for parent in self.parents.iter() {
-    //             write!(f, "{}->", parent.text)?;
-    //         }
-    //         write!(f, "[{}]", self.leaf.text)?;
-    //         Ok(())
-    //     }
-    // }
+    impl fmt::Display for super::Item<'_, TC> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for parent in self.path.iter() {
+                write!(f, "{}->", parent)?;
+            }
+            write!(f, "[{}]", self.child.id)?;
+            Ok(())
+        }
+    }
 
-    // fn node(text: &str, children: Vec<Node>) -> Node {
-    //     Node {
-    //         text: text.to_string(),
-    //         children,
-    //     }
+    // fn c(id: u64, children: Vec<SampleChild>) -> SampleChild {
+    //     SampleChild { id, children }
     // }
 }
