@@ -109,8 +109,7 @@ pub enum GroupErr {
 
 impl Group {
     pub fn extract_completed_tasks<F: FnMut(Task, &task::Context)>(&mut self, callback: &mut F) {
-        let mut context = task::Context::default();
-        self.ect(&mut context, callback, true);
+        self.ect(&mut task::Context::default(), callback, true);
     }
 
     fn ect<F: FnMut(Task, &task::Context)>(
@@ -139,7 +138,25 @@ impl Group {
         context.groups.pop();
     }
 
-    pub fn insert_task(task: Task, context: &task::Context) {
-        todo!()
+    /// Inserts task in a tree
+    /// - Write function inline
+    /// - Abstract common bits into "nested"
+    ///
+    /// 1. Recursively loop over groups
+    /// 2. Recursively loop over tasks
+    ///
+    /// The function "consumes" context as it recurses
+    pub fn insert_task(&mut self, task: Task, mut context: task::Context) {
+        // if let Some(group_id) = context.groups.drain(..1).next() {
+        //     let group =
+        // } else {
+
+        //     if let Some(task_id) = context.tasks.drain(..1).next() {
+        //         // Recursive task insert
+        //     } else {
+        //         // This is a root task - add to group
+        //         self.tasks.push(task);
+        //     }
+        // }
     }
 }

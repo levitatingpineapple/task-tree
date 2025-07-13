@@ -1,4 +1,7 @@
+// TODO: Remove this
 #![allow(dead_code)]
+mod tree;
+
 mod export;
 mod group;
 mod nested;
