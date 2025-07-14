@@ -1,28 +1,87 @@
-// Two type tree
+// # Two type tree
+//
+// ## Implmenentation
 //
 // - File is group root
 // - Group is group child
 // - Group is task root
 // - Task is task child
+//
+// ## Merging
+//
+// Interface - a merge function on root that consumes both and returns owned
 
 use std::hash::Hash;
 use std::slice::Iter;
 
-// Only one root ever present - no need to be identified
 pub trait Root<C: Child>: Sized {
-    fn children(&self) -> &Vec<C>;
+    // Requirements
+
+    fn children(&self) -> &[C];
+
+    fn children_mut(&mut self) -> &mut Vec<C>;
+
+    // Defautl impl
 
     fn iter(&self) -> DepthFirstIterator<'_, C> {
         DepthFirstIterator {
-            children: vec![],
-            iterators: vec![],
+            parent_path: vec![],
+            iterators: vec![self.children().iter()],
         }
+    }
+
+    // fn get(&self, path: &[C::Id]) -> Option<&C> {
+    //     path.split_first().and_then(|(id, remaining_path)| {
+    //         self.children()
+    //             .iter()
+    //             .find(|c| &c.id() == id)
+    //             .and_then(|c| {
+    //                 if remaining_path.is_empty() {
+    //                     Some(c)
+    //                 } else {
+    //                     c.get(remaining_path)
+    //                 }
+    //             })
+    //     })
+    // }
+
+    // fn get_mut(&mut self, path: &[C::Id]) -> Option<&mut C> {
+    //     path.split_first().and_then(|(id, remaining_path)| {
+    //         self.children_mut()
+    //             .iter_mut()
+    //             .find(|c| &c.id() == id)
+    //             .and_then(|c| {
+    //                 if remaining_path.is_empty() {
+    //                     Some(c)
+    //                 } else {
+    //                     c.get_mut(remaining_path)
+    //                 }
+    //             })
+    //     })
+    // }
+
+    fn merged_with(mut self, mut other: Self) -> Self {
+        for other_child in other.children_mut().drain(..) {
+            if let Some(pos) = self
+                .children_mut()
+                .iter()
+                .position(|child_a| child_a.id() == other_child.id())
+            {
+                let a_child = self.children_mut().remove(pos);
+                let merged = a_child.merged_with(other_child);
+                self.children_mut().insert(pos, merged);
+            } else {
+                self.children_mut().push(other_child);
+            }
+        }
+        self
     }
 }
 
-// `Root<Self>` -> Any child node is root of itself
+// Any child node is root of it's own children
 pub trait Child: Sized + Root<Self> {
-    type Id: Hash + Clone;
+    // Identifies a child with respect to it's parent
+    type Id: Hash + Clone + PartialEq;
 
     fn id(&self) -> Self::Id;
 }
@@ -30,11 +89,11 @@ pub trait Child: Sized + Root<Self> {
 // MARK: Depth First Iterator
 pub struct Item<'a, C: Child> {
     pub child: &'a C,
-    pub path: Vec<C::Id>,
+    pub parent_path: Vec<C::Id>,
 }
 
 pub struct DepthFirstIterator<'a, C: Child> {
-    children: Vec<C::Id>,
+    parent_path: Vec<C::Id>,
     iterators: Vec<Iter<'a, C>>,
 }
 
@@ -46,13 +105,13 @@ impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
             if let Some(child) = iterator.next() {
                 let item = Item {
                     child,
-                    path: self.children.clone(),
+                    parent_path: self.parent_path.clone(),
                 };
-                self.children.push(child.id());
+                self.parent_path.push(child.id());
                 self.iterators.push(child.children().iter());
                 Some(item)
             } else {
-                self.children.pop();
+                self.parent_path.pop();
                 self.iterators.pop();
                 self.next() // Recursive call while backtracking
             }
@@ -66,33 +125,111 @@ impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
 
 mod tests {
     use super::*;
-    use indoc::indoc;
     use std::fmt;
 
-    struct TR {
-        children: Vec<TC>,
+    #[test]
+    fn iterator() {
+        let display = test_root()
+            .iter()
+            .map(|c| format!("{}", c))
+            .collect::<Vec<String>>()
+            .join("\n")
+            + "\n";
+        let expectation = indoc::indoc! {"
+            [0]
+            [1]
+            1->[1.0]
+            1->1.0->[1.0.0]
+            1->1.0->1.0.0->[1.0.0.0]
+            1->[1.1]
+            [2]
+        "};
+        assert_eq!(expectation, display);
     }
 
-    impl Root<TC> for TR {
-        fn children(&self) -> &Vec<TC> {
+    // #[test]
+    // #[rustfmt::skip]
+    // fn index() {
+    //     let root = test_root();
+    //     assert_eq!(
+    //         root.get(&[]),
+    //         None
+    //     );
+    //     assert_eq!(
+    //         root.get(&["1", "INVALID"]),
+    //         None
+    //     );
+    //     assert_eq!(
+    //         root.get(&["1", "1.1"]),
+    //         Some(&tc("1.1"))
+    //     );
+    //     assert_eq!(
+    //         root.get(&["1", "1.0", "1.0.0", "1.0.0.0"]),
+    //         Some(&tc("1.0.0.0"))
+    //     );
+    //     assert_eq!(
+    //         root.get_mut(&["1", "1.0", "1.0.0", "1.0.0.0"]),
+    //         Some(&mut tc("1.0.0.0"))
+    //     );
+    // }
+
+    #[test]
+    #[rustfmt::skip]
+    fn merge() {
+        let a = test_root();
+        let b = TestRoot {
+            children: vec![
+                tc("0"), // Check for no duplications
+                tcc("1", vec![
+                    tc("NESTED_NEW"), // Merging at different offset
+                    tc("1.1")],
+                ),
+                tc("NEW") // Check merging new
+            ],
+        };
+        let merged = a.merged_with(b);
+        let expectation = TestRoot {
+            children: vec![
+                tc("0"),
+                tcc("1", vec![
+                    tcc("1.0", vec![
+                        tcc("1.0.0", vec![
+                            tc("1.0.0.0")
+                        ])
+                    ]),
+                    tc("1.1"),
+                    tc("NESTED_NEW") // Curently appended as last
+                ]),
+                tc("2"),
+                tc("NEW")
+            ]
+        };
+        assert_eq!(merged, expectation);
+    }
+
+    // MARK: Test types
+    #[derive(Debug, PartialEq)]
+    struct TestRoot {
+        children: Vec<TestChild>,
+    }
+
+    impl Root<TestChild> for TestRoot {
+        fn children(&self) -> &[TestChild] {
             &self.children
+        }
+
+        fn children_mut(&mut self) -> &mut Vec<TestChild> {
+            &mut self.children
         }
     }
 
-    struct TC {
+    #[derive(Debug, PartialEq)]
+    struct TestChild {
         id: &'static str,
         children: Vec<Self>,
     }
 
-    fn tc(id: &'static str) -> TC {
-        tcc(id, vec![])
-    }
-
-    fn tcc(id: &'static str, children: Vec<TC>) -> TC {
-        TC { id, children }
-    }
-
-    impl Child for TC {
+    impl Child for TestChild {
         type Id = &'static str;
 
         fn id(&self) -> Self::Id {
@@ -100,81 +237,51 @@ mod tests {
         }
     }
 
-    impl Root<Self> for TC {
-        fn children(&self) -> &Vec<Self> {
+    impl Root<Self> for TestChild {
+        fn children_mut(&mut self) -> &mut Vec<Self> {
+            &mut self.children
+        }
+
+        fn children(&self) -> &[Self] {
             &self.children
         }
     }
 
-    #[test]
-    fn iterator() {
-        #[rustfmt::skip]
-        let root = TR {
+    // MARK: Helpers
+
+    #[rustfmt::skip]
+    fn test_root() -> TestRoot {
+        TestRoot {
             children: vec![
                 tc("0"),
                 tcc("1", vec![
-                    tc("1.0"),
+                    tcc("1.0", vec![
+                        tcc("1.0.0", vec![
+                            tc("1.0.0.0")
+                        ])
+                    ]),
                     tc("1.1")
-                ])
+                ]),
+                tc("2")
             ]
-        };
-
-        let string = root
-            .iter()
-            .map(|c| format!("{}", c))
-            .collect::<Vec<String>>()
-            .join("\n");
-
-        println!("{}", string);
-
-        // let tree = node("Root", vec![
-        //     node("Foo", vec![
-        //         node("FooA", vec![
-        //             node("FooA1", vec![]),
-        //             node("FooA2", vec![]),
-        //         ]),
-        //         node("FooB", vec![
-        //             node("FooB1", vec![]),
-        //         ]),
-        //     ]),
-        //     node("Bar", vec![]),
-        // ]);
-        // let display = tree
-        //     .nested_iter()
-        //     .map(|n| n.to_string())
-        //     .collect::<Vec<String>>()
-        //     .join("\n")
-        //     + "\n";
-        // let expectation = indoc! {"
-        //     [Root]
-        //     Root->[Foo]
-        //     Root->Foo->[FooA]
-        //     Root->Foo->FooA->[FooA1]
-        //     Root->Foo->FooA->[FooA2]
-        //     Root->Foo->[FooB]
-        //     Root->Foo->FooB->[FooB1]
-        //     Root->[Bar]
-        // "};
-        // assert_eq!(expectation, display);
+        }
     }
 
-    // impl NestedIter for Node {
-    //     fn children(&self) -> &Vec<Self> {
-    //         &self.children
-    //     }
-    // }
+    fn tc(id: &'static str) -> TestChild {
+        tcc(id, vec![])
+    }
 
-    impl fmt::Display for super::Item<'_, TC> {
+    fn tcc(id: &'static str, children: Vec<TestChild>) -> TestChild {
+        TestChild { id, children }
+    }
+
+    impl fmt::Display for super::Item<'_, TestChild> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            for parent in self.path.iter() {
+            for parent in self.parent_path.iter() {
                 write!(f, "{}->", parent)?;
             }
             write!(f, "[{}]", self.child.id)?;
             Ok(())
         }
     }
-
-    // fn c(id: u64, children: Vec<SampleChild>) -> SampleChild {
-    //     SampleChild { id, children }
-    // }
 }

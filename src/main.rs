@@ -1,5 +1,5 @@
 // TODO: Remove this
-#![allow(dead_code)]
+// #![allow(dead_code)]
 mod tree;
 
 mod export;
