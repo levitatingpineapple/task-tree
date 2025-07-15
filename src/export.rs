@@ -61,6 +61,18 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     Ok(())
 }
 
+/// Moves all completed tasks to `todo.md`
+pub fn extract_completed(path: &Path) {
+    let markdown = read_to_string(&path).unwrap();
+    let mdast = to_mdast(&markdown, &ParseOptions::gfm())
+        .map_err(ExportErr::Markdown)
+        .unwrap();
+    let mut root = Group::from_mdast(mdast).unwrap();
+    let mut extracted = Vec::<(Task, crate::task::Context)>::new();
+    root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+}
+
+/// Given a full path - provices *stable* hash value for event
 fn event_id(group_path: &nested::Path<Group>, task_path: &nested::Path<Task>, index: usize) -> u64 {
     let mut hasher = DefaultHasher::new();
     for parent in &group_path.parents {

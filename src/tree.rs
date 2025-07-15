@@ -6,23 +6,25 @@
 // - Group is group child
 // - Group is task root
 // - Task is task child
-//
-// ## Merging
-//
-// Interface - a merge function on root that consumes both and returns owned
 
 use std::hash::Hash;
 use std::slice::Iter;
 
+/// Root of the tree structure parametrized by the type of children it contains
 pub trait Root<C: Child>: Sized {
     // Requirements
 
-    fn children(&self) -> &[C];
+    fn children(&self) -> &Vec<C>;
 
     fn children_mut(&mut self) -> &mut Vec<C>;
 
     // Defautl impl
 
+    fn child(&mut self, id: C::Id) -> Option<&mut C> {
+        self.children_mut().iter_mut().find(|c| c.id() == id)
+    }
+
+    /// Depth first iterator, which includes full path to the `Child`
     fn iter(&self) -> DepthFirstIterator<'_, C> {
         DepthFirstIterator {
             parent_path: vec![],
@@ -30,64 +32,35 @@ pub trait Root<C: Child>: Sized {
         }
     }
 
-    // fn get(&self, path: &[C::Id]) -> Option<&C> {
-    //     path.split_first().and_then(|(id, remaining_path)| {
-    //         self.children()
-    //             .iter()
-    //             .find(|c| &c.id() == id)
-    //             .and_then(|c| {
-    //                 if remaining_path.is_empty() {
-    //                     Some(c)
-    //                 } else {
-    //                     c.get(remaining_path)
-    //                 }
-    //             })
-    //     })
-    // }
-
-    // fn get_mut(&mut self, path: &[C::Id]) -> Option<&mut C> {
-    //     path.split_first().and_then(|(id, remaining_path)| {
-    //         self.children_mut()
-    //             .iter_mut()
-    //             .find(|c| &c.id() == id)
-    //             .and_then(|c| {
-    //                 if remaining_path.is_empty() {
-    //                     Some(c)
-    //                 } else {
-    //                     c.get_mut(remaining_path)
-    //                 }
-    //             })
-    //     })
-    // }
-
-    fn merged_with(mut self, mut other: Self) -> Self {
-        for other_child in other.children_mut().drain(..) {
-            if let Some(pos) = self
-                .children_mut()
-                .iter()
-                .position(|child_a| child_a.id() == other_child.id())
-            {
-                let a_child = self.children_mut().remove(pos);
-                let merged = a_child.merged_with(other_child);
-                self.children_mut().insert(pos, merged);
+    fn insert(&mut self, path: &[C::Id], insert_child: C) {
+        if let Some(id) = path.first() {
+            let next_child = if let Some(child) = self.child(id.clone()) {
+                child
             } else {
-                self.children_mut().push(other_child);
-            }
+                self.children_mut().push(C::new(id.clone()));
+                self.children_mut().last_mut().unwrap()
+            };
+            next_child.insert(&path[1..], insert_child);
+        } else {
+            self.children_mut().push(insert_child);
         }
-        self
     }
 }
 
-// Any child node is root of it's own children
+/// A child node that is identifyable with respect to it's parent
+/// Any child node is root of it's own children
 pub trait Child: Sized + Root<Self> {
     // Identifies a child with respect to it's parent
     type Id: Hash + Clone + PartialEq;
 
     fn id(&self) -> Self::Id;
+
+    fn new(id: Self::Id) -> Self;
 }
 
 // MARK: Depth First Iterator
-pub struct Item<'a, C: Child> {
+
+pub struct IteratorItem<'a, C: Child> {
     pub child: &'a C,
     pub parent_path: Vec<C::Id>,
 }
@@ -98,12 +71,12 @@ pub struct DepthFirstIterator<'a, C: Child> {
 }
 
 impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
-    type Item = Item<'a, C>;
+    type Item = IteratorItem<'a, C>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(iterator) = self.iterators.last_mut() {
             if let Some(child) = iterator.next() {
-                let item = Item {
+                let item = IteratorItem {
                     child,
                     parent_path: self.parent_path.clone(),
                 };
@@ -121,11 +94,16 @@ impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
     }
 }
 
-// MARK: Index
-
 mod tests {
     use super::*;
     use std::fmt;
+
+    #[test]
+    fn insert() {
+        let mut root = test_root();
+        root.insert(&["0", "HEY"], tc("child"));
+        println!("{:#?}", root);
+    }
 
     #[test]
     fn iterator() {
@@ -147,66 +125,6 @@ mod tests {
         assert_eq!(expectation, display);
     }
 
-    // #[test]
-    // #[rustfmt::skip]
-    // fn index() {
-    //     let root = test_root();
-    //     assert_eq!(
-    //         root.get(&[]),
-    //         None
-    //     );
-    //     assert_eq!(
-    //         root.get(&["1", "INVALID"]),
-    //         None
-    //     );
-    //     assert_eq!(
-    //         root.get(&["1", "1.1"]),
-    //         Some(&tc("1.1"))
-    //     );
-    //     assert_eq!(
-    //         root.get(&["1", "1.0", "1.0.0", "1.0.0.0"]),
-    //         Some(&tc("1.0.0.0"))
-    //     );
-    //     assert_eq!(
-    //         root.get_mut(&["1", "1.0", "1.0.0", "1.0.0.0"]),
-    //         Some(&mut tc("1.0.0.0"))
-    //     );
-    // }
-
-    #[test]
-    #[rustfmt::skip]
-    fn merge() {
-        let a = test_root();
-        let b = TestRoot {
-            children: vec![
-                tc("0"), // Check for no duplications
-                tcc("1", vec![
-                    tc("NESTED_NEW"), // Merging at different offset
-                    tc("1.1")],
-                ),
-                tc("NEW") // Check merging new
-            ],
-        };
-        let merged = a.merged_with(b);
-        let expectation = TestRoot {
-            children: vec![
-                tc("0"),
-                tcc("1", vec![
-                    tcc("1.0", vec![
-                        tcc("1.0.0", vec![
-                            tc("1.0.0.0")
-                        ])
-                    ]),
-                    tc("1.1"),
-                    tc("NESTED_NEW") // Curently appended as last
-                ]),
-                tc("2"),
-                tc("NEW")
-            ]
-        };
-        assert_eq!(merged, expectation);
-    }
-
     // MARK: Test types
     #[derive(Debug, PartialEq)]
     struct TestRoot {
@@ -214,7 +132,7 @@ mod tests {
     }
 
     impl Root<TestChild> for TestRoot {
-        fn children(&self) -> &[TestChild] {
+        fn children(&self) -> &Vec<TestChild> {
             &self.children
         }
 
@@ -235,6 +153,13 @@ mod tests {
         fn id(&self) -> Self::Id {
             self.id
         }
+
+        fn new(id: Self::Id) -> Self {
+            Self {
+                id,
+                children: vec![],
+            }
+        }
     }
 
     impl Root<Self> for TestChild {
@@ -242,7 +167,7 @@ mod tests {
             &mut self.children
         }
 
-        fn children(&self) -> &[Self] {
+        fn children(&self) -> &Vec<TestChild> {
             &self.children
         }
     }
@@ -275,7 +200,7 @@ mod tests {
         TestChild { id, children }
     }
 
-    impl fmt::Display for super::Item<'_, TestChild> {
+    impl fmt::Display for super::IteratorItem<'_, TestChild> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             for parent in self.parent_path.iter() {
                 write!(f, "{}->", parent)?;

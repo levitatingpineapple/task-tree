@@ -1,6 +1,6 @@
 // TODO: Remove this
 // #![allow(dead_code)]
-mod tree;
+// mod tree;
 
 mod export;
 mod group;
@@ -15,7 +15,10 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+use crate::export::extract_completed;
+
 const EXPORT_ICS: &str = "tasktree.export";
+const EXTRACT_COMPLETED: &str = "tasktree.cleanup";
 
 #[tokio::main]
 async fn main() {
@@ -60,24 +63,34 @@ impl LanguageServer for Backend {
         &self,
         params: ExecuteCommandParams,
     ) -> Result<Option<serde_json::Value>> {
-        if params.command == EXPORT_ICS {
-            let p = self.path.lock().await;
-            if let Some(ref path) = *p {
-                if let Err(export_err) = export::export_from(path) {
-                    self.client
-                        .show_message(MessageType::ERROR, format!("🔴 {}", export_err))
-                        .await;
+        match params.command.as_str() {
+            EXPORT_ICS => {
+                let p = self.path.lock().await;
+                if let Some(ref path) = *p {
+                    if let Err(export_err) = export::export_from(path) {
+                        self.client
+                            .show_message(MessageType::ERROR, format!("🔴 {}", export_err))
+                            .await;
+                    } else {
+                        self.client
+                            .show_message(MessageType::INFO, format!("🟢 {}", "Exported!"))
+                            .await;
+                    }
                 } else {
                     self.client
-                        .show_message(MessageType::INFO, format!("🟢 {}", "Exported!"))
+                        .show_message(MessageType::ERROR, "🔴 Missing opened file")
                         .await;
                 }
-            } else {
-                self.client
-                    .show_message(MessageType::ERROR, "🔴 Missing opened file")
-                    .await;
             }
+            EXTRACT_COMPLETED => {
+                let p = self.path.lock().await;
+                if let Some(ref path) = *p {
+                    extract_completed(path);
+                }
+            }
+            _ => { /* ignore unknown commands */ }
         }
+
         Ok(None)
     }
 }

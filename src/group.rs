@@ -105,8 +105,6 @@ pub enum GroupErr {
     Ts(#[from] TaskErr),
 }
 
-// TODO: Add heading tests
-
 impl Group {
     pub fn extract_completed_tasks<F: FnMut(Task, &task::Context)>(&mut self, callback: &mut F) {
         self.ect(&mut task::Context::default(), callback, true);
@@ -137,18 +135,4 @@ impl Group {
         });
         context.groups.pop();
     }
-
-    // pub fn insert_task(&mut self, task: Task, mut context: task::Context) {
-    // if let Some(group_id) = context.groups.drain(..1).next() {
-    //     let group =
-    // } else {
-
-    //     if let Some(task_id) = context.tasks.drain(..1).next() {
-    //         // Recursive task insert
-    //     } else {
-    //         // This is a root task - add to group
-    //         self.tasks.push(task);
-    //     }
-    // }
-    // }
 }
