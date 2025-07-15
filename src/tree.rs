@@ -45,6 +45,16 @@ pub trait Root<C: Child>: Sized {
             self.children_mut().push(insert_child);
         }
     }
+
+    fn last_children(&mut self, level: u8) -> Option<&mut Vec<C>> {
+        if level > 0 {
+            self.children_mut()
+                .last_mut()
+                .map(|c| c.last_children(level - 1))?
+        } else {
+            Some(self.children_mut())
+        }
+    }
 }
 
 /// A child node that is identifyable with respect to it's parent

@@ -3,8 +3,73 @@ use std::fmt::{self, Display, Formatter};
 use crate::{
     nested::NestedIter,
     task::{self, Task, TaskErr},
+    tree::{Child, Root},
 };
 use markdown::mdast::Node;
+
+#[derive(Debug, Default)]
+pub struct File {
+    pub sub_groups: Vec<Group>,
+    pub tasks: Vec<Task>,
+}
+
+impl File {
+    pub fn new(node: Node) -> Result<File, GroupErr> {
+        let mut file = File::default();
+        let mut group_level = 0;
+
+        if let Some(children) = node.children() {
+            for child in children {
+                match child {
+                    Node::Heading(heading) => {
+                        group_level = heading.depth - 1;
+                        let sub_groups: &mut Vec<Group> = file
+                            .last_children(group_level)
+                            .ok_or(GroupErr::HeadingOrder)?;
+                        sub_groups.push(Group::new(child.to_string()));
+                    }
+                    Node::List(list) => {
+                        let tasks = Task::new_tasks(list)?;
+                        if group_level == 0 {
+                            // Tasks without group
+                            file.tasks = tasks;
+                        } else {
+                            // For level `1` this will be last sub_group of the `File`
+                            let last_group: &mut Group = file
+                                .last_children(group_level - 1)
+                                .ok_or(GroupErr::HeadingOrder)?
+                                .last_mut() // Last child
+                                .unwrap(); //
+                            last_group.tasks = tasks;
+                        }
+                    }
+                    _ => { /* Ignore other node types */ }
+                }
+            }
+        }
+        Ok(file)
+    }
+}
+
+impl Root<Group> for File {
+    fn children(&self) -> &Vec<Group> {
+        &self.sub_groups
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Group> {
+        &mut self.sub_groups
+    }
+}
+
+impl Root<Task> for File {
+    fn children(&self) -> &Vec<Task> {
+        &self.tasks
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Task> {
+        &mut self.tasks
+    }
+}
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Group {
@@ -14,30 +79,7 @@ pub struct Group {
 }
 
 impl Group {
-    /// Creates root group from markdown abstract syntax tree
-    pub fn from_mdast(mdast: Node) -> Result<Self, GroupErr> {
-        let mut root = Group::new("Root");
-
-        if let Some(children) = mdast.children() {
-            for child in children {
-                match child {
-                    Node::Heading(heading) => {
-                        let foo = root
-                            .last_sub(heading.depth - 1)
-                            .ok_or(GroupErr::HeadingOrder)?;
-                        foo.sub_groups.push(Group::new(child.to_string()));
-                    }
-                    Node::List(list) => {
-                        let tasks = Task::new_tasks(list)?;
-                        root.last_added().tasks = tasks;
-                    }
-                    _ => { /* Ignore other node types */ }
-                }
-            }
-        }
-        Ok(root)
-    }
-
+    // TODO: Remove (this should be from trait)
     /// Creates an empty group with a name
     fn new<S: Into<String>>(text: S) -> Self {
         Group {
@@ -48,25 +90,6 @@ impl Group {
 
     pub fn is_empty(&self) -> bool {
         self.sub_groups.is_empty() && self.tasks.is_empty()
-    }
-
-    /// Returns last subcategory at some level
-    fn last_sub(&mut self, depth: u8) -> Option<&mut Group> {
-        if depth == 0 {
-            Some(self)
-        } else {
-            self.sub_groups.last_mut().map(|s| s.last_sub(depth - 1))?
-        }
-    }
-
-    /// Assuming tree is built depth-first returns last added element
-    fn last_added(&mut self) -> &mut Group {
-        if self.sub_groups.is_empty() {
-            self
-        } else {
-            // Unwrap required due to borrow checker..
-            self.sub_groups.last_mut().unwrap().last_added()
-        }
     }
 
     fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
@@ -91,6 +114,42 @@ impl Display for Group {
     }
 }
 
+impl Root<Group> for Group {
+    fn children(&self) -> &Vec<Self> {
+        &self.sub_groups
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Self> {
+        &mut self.sub_groups
+    }
+}
+
+impl Child for Group {
+    type Id = String;
+
+    fn id(&self) -> Self::Id {
+        self.text.clone()
+    }
+
+    fn new(id: Self::Id) -> Self {
+        Self {
+            text: id,
+            ..Default::default()
+        }
+    }
+}
+
+impl Root<Task> for Group {
+    fn children(&self) -> &Vec<Task> {
+        &self.tasks
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Task> {
+        &mut self.tasks
+    }
+}
+
+// TODO: Remove
 impl NestedIter for Group {
     fn children(&self) -> &Vec<Self> {
         &self.sub_groups

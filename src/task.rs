@@ -1,6 +1,7 @@
 use crate::{
     nested::NestedIter,
     session::{Session, SessionErr},
+    tree::{Child, Root},
 };
 use markdown::mdast::{List, ListItem, Node};
 use std::{
@@ -105,6 +106,28 @@ impl Display for Task {
 impl NestedIter for Task {
     fn children(&self) -> &Vec<Self> {
         &self.sub_tasks
+    }
+}
+
+impl Root<Task> for Task {
+    fn children(&self) -> &Vec<Task> {
+        &self.sub_tasks
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Task> {
+        &mut self.sub_tasks
+    }
+}
+
+impl Child for Task {
+    type Id = String;
+
+    fn id(&self) -> Self::Id {
+        self.text.clone()
+    }
+
+    fn new(id: Self::Id) -> Self {
+        todo!()
     }
 }
 

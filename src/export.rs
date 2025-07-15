@@ -1,8 +1,9 @@
 use crate::{
-    group::Group,
+    group::{File, Group},
     nested::{self, NestedIter},
     session,
     task::Task,
+    tree::{self, Root},
 };
 use chrono::Local;
 use dirs::home_dir;
@@ -19,23 +20,25 @@ use std::{
 
 pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let markdown = read_to_string(md_path)?;
-    let mdast = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
-    let root_group = Group::from_mdast(mdast)?;
+    let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
+    let file = File::new(node)?;
 
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
 
     let now = Local::now();
     let dtstamp = session::ics_format(now);
 
-    for group_path in root_group.nested_iter() {
-        for task_path in group_path
-            .leaf
+    for group_item in <File as Root<Group>>::iter(&file) {}
+
+    for group_item in <File as Root<Group>>::iter(&file) {
+        for task_path in group_item
+            .child
             .tasks
             .iter()
             .flat_map(|task| task.nested_iter())
         {
             for (index, session) in task_path.leaf.sessions.iter().enumerate() {
-                let id = event_id(&group_path, &task_path, index);
+                let id = event_id(&group_item, &task_path, index);
                 let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
                 event.push(Summary::new(task_path.leaf.text.clone()));
                 event.push(session.dt_start());
@@ -63,22 +66,26 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 
 /// Moves all completed tasks to `todo.md`
 pub fn extract_completed(path: &Path) {
-    let markdown = read_to_string(&path).unwrap();
-    let mdast = to_mdast(&markdown, &ParseOptions::gfm())
-        .map_err(ExportErr::Markdown)
-        .unwrap();
-    let mut root = Group::from_mdast(mdast).unwrap();
-    let mut extracted = Vec::<(Task, crate::task::Context)>::new();
-    root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+    // let markdown = read_to_string(&path).unwrap();
+    // let mdast = to_mdast(&markdown, &ParseOptions::gfm())
+    //     .map_err(ExportErr::Markdown)
+    //     .unwrap();
+    // let mut root = Group::from_mdast(mdast).unwrap();
+    // let mut extracted = Vec::<(Task, crate::task::Context)>::new();
+    // root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
 }
 
 /// Given a full path - provices *stable* hash value for event
-fn event_id(group_path: &nested::Path<Group>, task_path: &nested::Path<Task>, index: usize) -> u64 {
+fn event_id(
+    group_item: &tree::IteratorItem<'_, Group>,
+    task_path: &nested::Path<Task>,
+    index: usize,
+) -> u64 {
     let mut hasher = DefaultHasher::new();
-    for parent in &group_path.parents {
-        parent.text.hash(&mut hasher);
+    for parent in &group_item.parent_path {
+        parent.hash(&mut hasher);
     }
-    group_path.leaf.text.hash(&mut hasher);
+    group_item.child.text.hash(&mut hasher);
     for parent in &task_path.parents {
         parent.text.hash(&mut hasher);
     }
@@ -116,22 +123,24 @@ mod tests {
     fn display() {
         let path = Path::new("/Users/user/notes/plan/todo.md");
         let markdown = read_to_string(&path).unwrap();
-        let mdast = to_mdast(&markdown, &ParseOptions::gfm())
+        let node = to_mdast(&markdown, &ParseOptions::gfm())
             .map_err(ExportErr::Markdown)
             .unwrap();
-        let mut root = Group::from_mdast(mdast).unwrap();
-        let mut extracted = Vec::<(Task, task::Context)>::new();
-        root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+        let mut file = File::new(node).unwrap();
 
-        let string = root.to_string();
-        println!("-----------------------------------------------------------------");
-        println!("{}", string);
+        dbg!(file);
+        // let mut extracted = Vec::<(Task, task::Context)>::new();
+        // root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
 
-        println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-        for (task, context) in extracted {
-            println!("CONTEXT::{:?}", context);
-            println!("TASK::{}", task);
-            println!("~~~~~~~~~")
-        }
+        // let string = root.to_string();
+        // println!("-----------------------------------------------------------------");
+        // println!("{}", string);
+
+        // println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+        // for (task, context) in extracted {
+        //     println!("CONTEXT::{:?}", context);
+        //     println!("TASK::{}", task);
+        //     println!("~~~~~~~~~")
+        // }
     }
 }

@@ -1,6 +1,6 @@
 // TODO: Remove this
-// #![allow(dead_code)]
-// mod tree;
+#![allow(dead_code)]
+mod tree;
 
 mod export;
 mod group;
