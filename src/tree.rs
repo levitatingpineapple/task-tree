@@ -20,7 +20,7 @@ pub trait Root<C: Child>: Sized {
 
     // Defautl impl
 
-    fn child(&mut self, id: C::Id) -> Option<&mut C> {
+    fn child_mut(&mut self, id: C::Id) -> Option<&mut C> {
         self.children_mut().iter_mut().find(|c| c.id() == id)
     }
 
@@ -34,7 +34,7 @@ pub trait Root<C: Child>: Sized {
 
     fn insert(&mut self, path: &[C::Id], insert_child: C) {
         if let Some(id) = path.first() {
-            let next_child = if let Some(child) = self.child(id.clone()) {
+            let next_child = if let Some(child) = self.child_mut(id.clone()) {
                 child
             } else {
                 self.children_mut().push(C::new(id.clone()));
@@ -104,6 +104,7 @@ impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::fmt;

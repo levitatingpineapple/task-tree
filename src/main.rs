@@ -1,12 +1,11 @@
-// TODO: Remove this
-#![allow(dead_code)]
-mod tree;
+#![allow(dead_code, unused_variables)]
 
 mod export;
+mod file;
 mod group;
-mod nested;
 mod session;
 mod task;
+mod tree;
 
 use std::path::PathBuf;
 use tokio::io::{stdin, stdout};
@@ -15,7 +14,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::export::extract_completed;
+use crate::export::{export_from, extract_completed};
 
 const EXPORT_ICS: &str = "tasktree.export";
 const EXTRACT_COMPLETED: &str = "tasktree.cleanup";
@@ -67,9 +66,9 @@ impl LanguageServer for Backend {
             EXPORT_ICS => {
                 let p = self.path.lock().await;
                 if let Some(ref path) = *p {
-                    if let Err(export_err) = export::export_from(path) {
+                    if let Err(err) = export_from(path) {
                         self.client
-                            .show_message(MessageType::ERROR, format!("🔴 {}", export_err))
+                            .show_message(MessageType::ERROR, format!("🔴 {}", err))
                             .await;
                     } else {
                         self.client
@@ -85,7 +84,15 @@ impl LanguageServer for Backend {
             EXTRACT_COMPLETED => {
                 let p = self.path.lock().await;
                 if let Some(ref path) = *p {
-                    extract_completed(path);
+                    if let Err(err) = extract_completed(path) {
+                        self.client
+                            .show_message(MessageType::ERROR, format!("{}", err))
+                            .await;
+                    } else {
+                        self.client
+                            .show_message(MessageType::INFO, format!("🟢 {}", "Extracted!"))
+                            .await;
+                    }
                 }
             }
             _ => { /* ignore unknown commands */ }

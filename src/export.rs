@@ -1,9 +1,9 @@
 use crate::{
-    group::{File, Group},
-    nested::{self, NestedIter},
+    file::File,
+    group::Group,
     session,
     task::Task,
-    tree::{self, Root},
+    tree::{Child, Root},
 };
 use chrono::Local;
 use dirs::home_dir;
@@ -22,37 +22,45 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     let markdown = read_to_string(md_path)?;
     let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let file = File::new(node)?;
-
     let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
-
     let now = Local::now();
-    let dtstamp = session::ics_format(now);
-
-    for group_item in <File as Root<Group>>::iter(&file) {}
-
+    // Sequence hack - Apple calendar will only update event _once_(!)
+    // even when `DTSTAMP` and/or `LAST-MODIFIED` are incremented
+    // setting sequence number to current unix timestamp
+    // seems to be the only way to update events wihout retaining any state
+    let sequence = Sequence::new(now.timestamp().to_string());
+    let datestamp = session::ics_format(&now);
     for group_item in <File as Root<Group>>::iter(&file) {
-        for task_path in group_item
-            .child
-            .tasks
-            .iter()
-            .flat_map(|task| task.nested_iter())
-        {
-            for (index, session) in task_path.leaf.sessions.iter().enumerate() {
-                let id = event_id(&group_item, &task_path, index);
-                let mut event = Event::new(format!("{:x}", id), dtstamp.clone());
-                event.push(Summary::new(task_path.leaf.text.clone()));
-                event.push(session.dt_start());
-                event.push(session.dt_end());
-                // Apple calendar will only update event _once_
-                // even when `DTSTAMP` and/or `LAST-MODIFIED` are incremented
-                // setting sequence number to current unix timestamp
-                // allows updating events wihout retaining any state
-                event.push(Sequence::new(now.timestamp().to_string()));
-                if let Some(rrule) = &session.repeat {
-                    event.push(RRule::new(rrule.to_string()));
-                }
-                calendar.add_event(event);
-            }
+        for task_item in <Group as Root<Task>>::iter(&group_item.child) {
+            task_item
+                .child
+                .sessions
+                .iter()
+                .enumerate()
+                .for_each(|(index, session)| {
+                    // Construct unique event id using static hasher
+                    let mut hasher = DefaultHasher::new();
+                    for parent in &group_item.parent_path {
+                        parent.hash(&mut hasher);
+                    }
+                    group_item.child.id().hash(&mut hasher);
+                    for parent in &task_item.parent_path {
+                        parent.hash(&mut hasher);
+                    }
+                    task_item.child.id().hash(&mut hasher);
+                    index.hash(&mut hasher);
+                    let id = hasher.finish();
+                    // Populate and return the event
+                    let mut event = Event::new(format!("{:x}", id), datestamp.clone());
+                    event.push(Summary::new(task_item.child.text.clone()));
+                    event.push(session.dt_start());
+                    event.push(session.dt_end());
+                    event.push(sequence.clone());
+                    if let Some(rrule) = &session.repeat {
+                        event.push(RRule::new(rrule.to_string()));
+                    }
+                    calendar.add_event(event);
+                });
         }
     }
     let ics_path = home_dir()
@@ -65,33 +73,15 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 }
 
 /// Moves all completed tasks to `todo.md`
-pub fn extract_completed(path: &Path) {
-    // let markdown = read_to_string(&path).unwrap();
-    // let mdast = to_mdast(&markdown, &ParseOptions::gfm())
-    //     .map_err(ExportErr::Markdown)
-    //     .unwrap();
-    // let mut root = Group::from_mdast(mdast).unwrap();
-    // let mut extracted = Vec::<(Task, crate::task::Context)>::new();
-    // root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
-}
-
-/// Given a full path - provices *stable* hash value for event
-fn event_id(
-    group_item: &tree::IteratorItem<'_, Group>,
-    task_path: &nested::Path<Task>,
-    index: usize,
-) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    for parent in &group_item.parent_path {
-        parent.hash(&mut hasher);
-    }
-    group_item.child.text.hash(&mut hasher);
-    for parent in &task_path.parents {
-        parent.text.hash(&mut hasher);
-    }
-    task_path.leaf.text.hash(&mut hasher);
-    index.hash(&mut hasher);
-    hasher.finish()
+pub fn extract_completed(path: &Path) -> Result<(), ExportErr> {
+    let markdown = read_to_string(&path).unwrap();
+    let node = to_mdast(&markdown, &ParseOptions::gfm())
+        .map_err(ExportErr::Markdown)
+        .expect("TEST - Remove this");
+    let mut file = File::new(node).unwrap();
+    let mut extracted = Vec::<(Task, crate::task::Context)>::new();
+    file.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -107,9 +97,8 @@ pub enum ExportErr {
 
     #[error("Task error: {0}")]
     Task(#[from] crate::task::TaskErr),
-
     #[error("Group error: {0}")]
-    Group(#[from] crate::group::GroupErr),
+    File(#[from] crate::file::FileErr),
 }
 
 #[cfg(test)]
@@ -126,7 +115,7 @@ mod tests {
         let node = to_mdast(&markdown, &ParseOptions::gfm())
             .map_err(ExportErr::Markdown)
             .unwrap();
-        let mut file = File::new(node).unwrap();
+        let mut file = File::new(node);
 
         dbg!(file);
         // let mut extracted = Vec::<(Task, task::Context)>::new();

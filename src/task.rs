@@ -1,5 +1,4 @@
 use crate::{
-    nested::NestedIter,
     session::{Session, SessionErr},
     tree::{Child, Root},
 };
@@ -103,12 +102,6 @@ impl Display for Task {
     }
 }
 
-impl NestedIter for Task {
-    fn children(&self) -> &Vec<Self> {
-        &self.sub_tasks
-    }
-}
-
 impl Root<Task> for Task {
     fn children(&self) -> &Vec<Task> {
         &self.sub_tasks
@@ -127,7 +120,10 @@ impl Child for Task {
     }
 
     fn new(id: Self::Id) -> Self {
-        todo!()
+        Self {
+            text: id,
+            ..Default::default()
+        }
     }
 }
 
