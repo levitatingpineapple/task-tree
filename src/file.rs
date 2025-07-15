@@ -1,7 +1,9 @@
+use std::fmt::{self, Display, Formatter};
+
 use crate::{
     group::Group,
-    task::{self, Task, TaskErr},
-    tree::{Child, Root},
+    task::{Task, TaskErr},
+    tree::{Child, Parent},
 };
 use markdown::mdast::Node;
 
@@ -47,39 +49,41 @@ impl File {
         Ok(file)
     }
 
-    pub fn extract_completed_tasks<F: FnMut(Task, &task::Context)>(&mut self, callback: &mut F) {
-        self.ect(&mut task::Context::default(), callback, true);
-    }
+    #[allow(unused_variables)]
+    pub fn extract_completed_tasks<F>(&mut self, callback: &mut F)
+    where
+        F: FnMut(Task),
+    {
+        let mut tasks = Vec::<Task>::new();
 
-    fn ect<F: FnMut(Task, &task::Context)>(
-        &mut self,
-        context: &mut task::Context,
-        callback: &mut F,
-        root: bool,
-    ) {
-        todo!()
-        //     // Exclude root node from he context.
-        //     if !root {
-        //         context.groups.push(self.text.clone());
-        //     }
-        //     // Extract all root tasks
-        //     for task in self.tasks.extract_if(.., |t| t.done == Some(true)) {
-        //         callback(task, context);
-        //     }
-        //     // Recurse into child tasks
-        //     for task in self.tasks.iter_mut() {
-        //         task.extract_completed(context, callback);
-        //     }
-        //     // Repeat for all children - discarding the empty ones
-        //     self.sub_groups.retain_mut(|child| {
-        //         child.ect(context, callback, false);
-        //         !child.is_empty()
-        //     });
-        //     context.groups.pop();
+        self.for_each_mut(&mut |group| {
+            // group.extract_if::<>(&mut { |task: &mut Task| true }, todo!());
+            <Group as Parent<Task>>::extract_if(
+                group,
+                &mut |task| task.done == Some(true), // Predicate
+                &mut |task| tasks.push(task),        // Action
+            );
+        });
+
+        println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---");
+        println!("{}", self);
+        println!("-----------------------------------------------------------------");
+        for task in tasks {
+            println!("{}", task.text);
+        }
     }
 }
 
-impl Root<Group> for File {
+impl Display for File {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for group in &self.sub_groups {
+            write!(f, "{}", group)?
+        }
+        Ok(())
+    }
+}
+
+impl Parent<Group> for File {
     fn children(&self) -> &Vec<Group> {
         &self.sub_groups
     }
@@ -97,4 +101,21 @@ pub enum FileErr {
     LooseTasks,
     #[error("Task error: {0}")]
     Ts(#[from] TaskErr),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use markdown::{ParseOptions, to_mdast};
+    use std::{fs::read_to_string, path::Path};
+
+    #[test]
+    fn extract() {
+        let path = Path::new("/Users/user/notes/plan/todo.md");
+        let markdown = read_to_string(&path).unwrap();
+        let node = to_mdast(&markdown, &ParseOptions::gfm()).unwrap();
+        let mut file = File::new(node).unwrap();
+
+        file.extract_completed_tasks(&mut |t, c| println!("hey"));
+    }
 }

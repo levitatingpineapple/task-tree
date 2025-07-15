@@ -1,6 +1,6 @@
 use crate::{
     session::{Session, SessionErr},
-    tree::{Child, Root},
+    tree::{Child, Parent},
 };
 use markdown::mdast::{List, ListItem, Node};
 use std::{
@@ -64,21 +64,6 @@ impl Task {
             .collect()
     }
 
-    pub fn extract_completed<F: FnMut(Task, &Context)>(
-        &mut self,
-        context: &mut Context,
-        callback: &mut F,
-    ) {
-        context.tasks.push(self.text.clone());
-        for child in self.sub_tasks.extract_if(.., |c| c.done == Some(true)) {
-            callback(child, context);
-        }
-        for child in &mut self.sub_tasks {
-            child.extract_completed(context, callback);
-        }
-        context.tasks.pop();
-    }
-
     fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         write!(f, "{}-", "  ".repeat(level))?;
         if let Some(done) = self.done {
@@ -102,7 +87,7 @@ impl Display for Task {
     }
 }
 
-impl Root<Task> for Task {
+impl Parent<Task> for Task {
     fn children(&self) -> &Vec<Task> {
         &self.sub_tasks
     }
@@ -125,12 +110,6 @@ impl Child for Task {
             ..Default::default()
         }
     }
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct Context {
-    pub groups: Vec<String>,
-    pub tasks: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]

@@ -3,7 +3,7 @@ use crate::{
     group::Group,
     session,
     task::Task,
-    tree::{Child, Root},
+    tree::{Child, Parent},
 };
 use chrono::Local;
 use dirs::home_dir;
@@ -30,8 +30,8 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
     // seems to be the only way to update events wihout retaining any state
     let sequence = Sequence::new(now.timestamp().to_string());
     let datestamp = session::ics_format(&now);
-    for group_item in <File as Root<Group>>::iter(&file) {
-        for task_item in <Group as Root<Task>>::iter(&group_item.child) {
+    for group_item in <File as Parent<Group>>::iter(&file) {
+        for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
             task_item
                 .child
                 .sessions
@@ -79,8 +79,8 @@ pub fn extract_completed(path: &Path) -> Result<(), ExportErr> {
         .map_err(ExportErr::Markdown)
         .expect("TEST - Remove this");
     let mut file = File::new(node).unwrap();
-    let mut extracted = Vec::<(Task, crate::task::Context)>::new();
-    file.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+    let mut extracted = Vec::<Task>::new();
+    file.extract_completed_tasks(&mut |t| extracted.push(t));
     Ok(())
 }
 
@@ -103,9 +103,6 @@ pub enum ExportErr {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::task;
-
     use super::*;
 
     #[test]

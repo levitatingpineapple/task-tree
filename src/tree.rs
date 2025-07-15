@@ -11,15 +11,14 @@ use std::hash::Hash;
 use std::slice::Iter;
 
 /// Root of the tree structure parametrized by the type of children it contains
-pub trait Root<C: Child>: Sized {
+pub trait Parent<C: Child>: Sized {
     // Requirements
 
     fn children(&self) -> &Vec<C>;
 
     fn children_mut(&mut self) -> &mut Vec<C>;
 
-    // Defautl impl
-
+    /// Finds a child, given it's id in O(n) time
     fn child_mut(&mut self, id: C::Id) -> Option<&mut C> {
         self.children_mut().iter_mut().find(|c| c.id() == id)
     }
@@ -32,6 +31,7 @@ pub trait Root<C: Child>: Sized {
         }
     }
 
+    /// Inserts node, given a node to a parent
     fn insert(&mut self, path: &[C::Id], insert_child: C) {
         if let Some(id) = path.first() {
             let next_child = if let Some(child) = self.child_mut(id.clone()) {
@@ -46,6 +46,7 @@ pub trait Root<C: Child>: Sized {
         }
     }
 
+    /// Returns children of the last node at given level
     fn last_children(&mut self, level: u8) -> Option<&mut Vec<C>> {
         if level > 0 {
             self.children_mut()
@@ -55,11 +56,34 @@ pub trait Root<C: Child>: Sized {
             Some(self.children_mut())
         }
     }
+
+    fn for_each_mut<A>(&mut self, action: &mut A)
+    where
+        A: FnMut(&mut C),
+    {
+        self.children_mut().iter_mut().for_each(|child| {
+            action(child);
+            child.for_each_mut(action);
+        })
+    }
+
+    fn extract_if<P, A>(&mut self, filter: &mut P, action: &mut A)
+    where
+        P: Fn(&mut C) -> bool,
+        A: FnMut(C),
+    {
+        self.children_mut()
+            .extract_if(.., |c| filter(c))
+            .for_each(|c| action(c));
+        for child in self.children_mut() {
+            child.extract_if(filter, action);
+        }
+    }
 }
 
 /// A child node that is identifyable with respect to it's parent
 /// Any child node is root of it's own children
-pub trait Child: Sized + Root<Self> {
+pub trait Child: Sized + Parent<Self> {
     // Identifies a child with respect to it's parent
     type Id: Hash + Clone + PartialEq;
 
@@ -96,7 +120,7 @@ impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
             } else {
                 self.parent_path.pop();
                 self.iterators.pop();
-                self.next() // Recursive call while backtracking
+                self.next() // Skip while backtracking
             }
         } else {
             None
@@ -142,7 +166,7 @@ mod tests {
         children: Vec<TestChild>,
     }
 
-    impl Root<TestChild> for TestRoot {
+    impl Parent<TestChild> for TestRoot {
         fn children(&self) -> &Vec<TestChild> {
             &self.children
         }
@@ -173,7 +197,7 @@ mod tests {
         }
     }
 
-    impl Root<Self> for TestChild {
+    impl Parent<Self> for TestChild {
         fn children_mut(&mut self) -> &mut Vec<Self> {
             &mut self.children
         }

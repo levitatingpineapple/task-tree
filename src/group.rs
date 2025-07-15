@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::{
     task::Task,
-    tree::{Child, Root},
+    tree::{Child, Parent},
 };
 
 #[derive(Debug, Default, PartialEq)]
@@ -13,19 +13,6 @@ pub struct Group {
 }
 
 impl Group {
-    // TODO: Remove (this should be from trait)
-    /// Creates an empty group with a name
-    fn new<S: Into<String>>(text: S) -> Self {
-        Group {
-            text: text.into(),
-            ..Default::default()
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.sub_groups.is_empty() && self.tasks.is_empty()
-    }
-
     fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         if level > 0 {
             write!(f, "{} {}\n\n", "#".repeat(level), self.text)?;
@@ -43,12 +30,12 @@ impl Group {
 
 impl Display for Group {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Headings start at level 1 with 0 being file itself
-        self.fmt_recursive(f, 0)
+        // Headings start at level 1
+        self.fmt_recursive(f, 1)
     }
 }
 
-impl Root<Group> for Group {
+impl Parent<Group> for Group {
     fn children(&self) -> &Vec<Self> {
         &self.sub_groups
     }
@@ -73,7 +60,7 @@ impl Child for Group {
     }
 }
 
-impl Root<Task> for Group {
+impl Parent<Task> for Group {
     fn children(&self) -> &Vec<Task> {
         &self.tasks
     }
