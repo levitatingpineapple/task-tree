@@ -31,18 +31,16 @@ pub trait Parent<C: Child>: Sized {
         }
     }
 
-    /// Inserts node, given a node to a parent
-    fn insert(&mut self, path: &[C::Id], insert_child: C) {
-        if let Some(id) = path.first() {
-            let next_child = if let Some(child) = self.child_mut(id.clone()) {
-                child
-            } else {
-                self.children_mut().push(C::new(id.clone()));
-                self.children_mut().last_mut().unwrap()
-            };
-            next_child.insert(&path[1..], insert_child);
+    fn insert(&mut self, path: &[C::Id], child: C) -> &mut C {
+        if let Some((first, rest)) = path.split_first() {
+            if self.child_mut(first.clone()).is_none() {
+                self.children_mut().push(C::new(first.clone()));
+            }
+            let c = self.child_mut(first.clone()).unwrap();
+            c.insert(rest, child)
         } else {
-            self.children_mut().push(insert_child);
+            self.children_mut().push(child);
+            self.children_mut().last_mut().unwrap()
         }
     }
 
@@ -57,26 +55,28 @@ pub trait Parent<C: Child>: Sized {
         }
     }
 
-    fn for_each_mut<A>(&mut self, action: &mut A)
+    fn for_each_mut<A>(&mut self, path: &mut Vec<C::Id>, action: &mut A)
     where
-        A: FnMut(&mut C),
+        A: FnMut(&mut C, &Vec<C::Id>),
     {
         self.children_mut().iter_mut().for_each(|child| {
-            action(child);
-            child.for_each_mut(action);
+            action(child, &path);
+            path.push(child.id());
+            child.for_each_mut(path, action);
         })
     }
 
-    fn extract_if<P, A>(&mut self, filter: &mut P, action: &mut A)
+    fn extract_if<P, A>(&mut self, path: &mut Vec<C::Id>, action: &mut A, filter: &P)
     where
+        A: FnMut(C, &Vec<C::Id>),
         P: Fn(&mut C) -> bool,
-        A: FnMut(C),
     {
         self.children_mut()
             .extract_if(.., |c| filter(c))
-            .for_each(|c| action(c));
+            .for_each(|c| action(c, path));
         for child in self.children_mut() {
-            child.extract_if(filter, action);
+            path.push(child.id());
+            child.extract_if(path, action, filter);
         }
     }
 }
@@ -134,10 +134,37 @@ mod tests {
     use std::fmt;
 
     #[test]
+    #[rustfmt::skip]
     fn insert() {
-        let mut root = test_root();
-        root.insert(&["0", "HEY"], tc("child"));
-        println!("{:#?}", root);
+        let mut root = TestRoot {
+            children: vec![
+                tc("a"),
+                tcc(
+                    "b",
+                    vec![
+                        tc("b1"),
+                        tc("b2"),
+                    ],
+                ),
+            ],
+        };
+        root.insert(&["c"], tc("c1"));
+        root.insert(&["b"], tc("b3"));
+        let expectation = TestRoot {
+            children: vec![
+                tc("a"),
+                tcc("b", vec![
+                    tc("b1"),
+                    tc("b2"),
+                    tc("b3")
+                ]),
+                tcc("c", vec![
+                    tc("c1")
+                ])
+            ],
+        };
+        dbg!(&root);
+        assert_eq!(root,expectation);
     }
 
     #[test]
@@ -208,7 +235,6 @@ mod tests {
     }
 
     // MARK: Helpers
-
     #[rustfmt::skip]
     fn test_root() -> TestRoot {
         TestRoot {

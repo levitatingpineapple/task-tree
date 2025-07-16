@@ -80,7 +80,8 @@ pub fn extract_completed(path: &Path) -> Result<(), ExportErr> {
         .expect("TEST - Remove this");
     let mut file = File::new(node).unwrap();
     let mut extracted = Vec::<Task>::new();
-    file.extract_completed_tasks(&mut |t| extracted.push(t));
+
+    // file.extract_completed_tasks(&mut |t| extracted.push(t));
     Ok(())
 }
 

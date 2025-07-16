@@ -49,29 +49,42 @@ impl File {
         Ok(file)
     }
 
-    #[allow(unused_variables)]
-    pub fn extract_completed_tasks<F>(&mut self, callback: &mut F)
-    where
-        F: FnMut(Task),
-    {
-        let mut tasks = Vec::<Task>::new();
+    pub fn insert(&mut self, t: TempName) {
+        <File as Parent<Group>>::insert(self, t.group_path, t.group);
+    }
 
-        self.for_each_mut(&mut |group| {
-            // group.extract_if::<>(&mut { |task: &mut Task| true }, todo!());
+    pub fn extract_completed_tasks<F>(&mut self, action: &mut F)
+    where
+        F: FnMut(TempName),
+    {
+        self.for_each_mut(&mut vec![], &mut |group, group_path| {
+            let group_id = group.id();
             <Group as Parent<Task>>::extract_if(
                 group,
-                &mut |task| task.done == Some(true), // Predicate
-                &mut |task| tasks.push(task),        // Action
+                &mut vec![],
+                &mut |task, task_path| {
+                    action(TempName {
+                        group_path,
+                        group: Group::new(group_id.clone()), // New shallow group
+                        task_path,
+                        task,
+                    });
+                },
+                &|task| task.done == Some(true),
             );
         });
 
         println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---");
         println!("{}", self);
         println!("-----------------------------------------------------------------");
-        for task in tasks {
-            println!("{}", task.text);
-        }
     }
+}
+
+struct TempName<'a> {
+    group_path: &'a Vec<String>,
+    group: Group,
+    task_path: &'a Vec<String>,
+    task: Task,
 }
 
 impl Display for File {
@@ -116,6 +129,6 @@ mod tests {
         let node = to_mdast(&markdown, &ParseOptions::gfm()).unwrap();
         let mut file = File::new(node).unwrap();
 
-        file.extract_completed_tasks(&mut |t, c| println!("hey"));
+        // file.extract_completed_tasks(&mut |t, c, s| println!("hey"));
     }
 }

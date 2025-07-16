@@ -97,7 +97,6 @@ impl LanguageServer for Backend {
             }
             _ => { /* ignore unknown commands */ }
         }
-
         Ok(None)
     }
 }
