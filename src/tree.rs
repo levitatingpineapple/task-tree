@@ -32,13 +32,18 @@ pub trait Parent<C: Child>: Sized {
     }
 
     fn insert(&mut self, path: &[C::Id], child: C) -> &mut C {
-        if let Some((first, rest)) = path.split_first() {
-            if self.child_mut(first.clone()).is_none() {
-                self.children_mut().push(C::new(first.clone()));
+        if let Some((id, rest)) = path.split_first() {
+            // Add parent if it does not exist
+            if self.child_mut(id.clone()).is_none() {
+                self.children_mut().push(C::new(id.clone()));
             }
-            let c = self.child_mut(first.clone()).unwrap();
+            // Get a reference to the parent, which now must exist
+            let c = self.child_mut(id.clone()).unwrap();
+            // Recursive call
             c.insert(rest, child)
         } else {
+            // No path left - push child itself
+            // TODO: Need to merge, if already exists
             self.children_mut().push(child);
             self.children_mut().last_mut().unwrap()
         }

@@ -1,11 +1,15 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    fs::read_to_string,
+    path::Path,
+};
 
 use crate::{
     group::Group,
     task::{Task, TaskErr},
     tree::{Child, Parent},
 };
-use markdown::mdast::Node;
+use markdown::{ParseOptions, mdast::Node, to_mdast};
 
 #[derive(Debug, Default)]
 pub struct File {
@@ -13,6 +17,11 @@ pub struct File {
 }
 
 impl File {
+    pub fn read_from(path: &Path) -> Result<File, FileErr> {
+        let markdown = read_to_string(&path).unwrap();
+        File::new(to_mdast(&markdown, &ParseOptions::gfm()).map_err(|m| FileErr::Markdown(m))?)
+    }
+
     pub fn new(node: Node) -> Result<File, FileErr> {
         let mut file = File::default();
         let mut heading_depth = 0;
@@ -49,13 +58,14 @@ impl File {
         Ok(file)
     }
 
-    pub fn insert(&mut self, t: TempName) {
-        <File as Parent<Group>>::insert(self, t.group_path, t.group);
+    pub fn insert_task(&mut self, t: Context) {
+        self.insert(t.group_path, t.group)
+            .insert(t.task_path, t.task);
     }
 
     pub fn extract_completed_tasks<F>(&mut self, action: &mut F)
     where
-        F: FnMut(TempName),
+        F: FnMut(Context),
     {
         self.for_each_mut(&mut vec![], &mut |group, group_path| {
             let group_id = group.id();
@@ -63,7 +73,7 @@ impl File {
                 group,
                 &mut vec![],
                 &mut |task, task_path| {
-                    action(TempName {
+                    action(Context {
                         group_path,
                         group: Group::new(group_id.clone()), // New shallow group
                         task_path,
@@ -73,18 +83,14 @@ impl File {
                 &|task| task.done == Some(true),
             );
         });
-
-        println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++---");
-        println!("{}", self);
-        println!("-----------------------------------------------------------------");
     }
 }
 
-struct TempName<'a> {
-    group_path: &'a Vec<String>,
-    group: Group,
-    task_path: &'a Vec<String>,
-    task: Task,
+pub struct Context<'a> {
+    pub group_path: &'a Vec<String>,
+    pub group: Group,
+    pub task_path: &'a Vec<String>,
+    pub task: Task,
 }
 
 impl Display for File {
@@ -106,7 +112,7 @@ impl Parent<Group> for File {
     }
 }
 
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum FileErr {
     #[error("Heading parent missing")]
     HeadingOrder,
@@ -114,21 +120,9 @@ pub enum FileErr {
     LooseTasks,
     #[error("Task error: {0}")]
     Ts(#[from] TaskErr),
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use markdown::{ParseOptions, to_mdast};
-    use std::{fs::read_to_string, path::Path};
-
-    #[test]
-    fn extract() {
-        let path = Path::new("/Users/user/notes/plan/todo.md");
-        let markdown = read_to_string(&path).unwrap();
-        let node = to_mdast(&markdown, &ParseOptions::gfm()).unwrap();
-        let mut file = File::new(node).unwrap();
-
-        // file.extract_completed_tasks(&mut |t, c, s| println!("hey"));
-    }
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Invalid Markdown: {0}")]
+    Markdown(markdown::message::Message),
 }

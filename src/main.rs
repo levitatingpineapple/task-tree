@@ -1,5 +1,3 @@
-// #![allow(dead_code, unused_variables)]
-
 mod export;
 mod file;
 mod group;
@@ -7,7 +5,7 @@ mod session;
 mod task;
 mod tree;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::io::{stdin, stdout};
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -84,7 +82,10 @@ impl LanguageServer for Backend {
             EXTRACT_COMPLETED => {
                 let p = self.path.lock().await;
                 if let Some(ref path) = *p {
-                    if let Err(err) = extract_completed(path) {
+                    // TODO: Implement finding `plan` root
+                    if let Err(err) =
+                        extract_completed(path, &Path::new("/Users/user/notes/plan/done.md"))
+                    {
                         self.client
                             .show_message(MessageType::ERROR, format!("{}", err))
                             .await;

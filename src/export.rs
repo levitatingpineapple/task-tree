@@ -73,15 +73,11 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 }
 
 /// Moves all completed tasks to `todo.md`
-pub fn extract_completed(path: &Path) -> Result<(), ExportErr> {
-    let markdown = read_to_string(&path).unwrap();
-    let node = to_mdast(&markdown, &ParseOptions::gfm())
-        .map_err(ExportErr::Markdown)
-        .expect("TEST - Remove this");
-    let mut file = File::new(node).unwrap();
-    let mut extracted = Vec::<Task>::new();
+pub fn extract_completed(todo: &Path, done: &Path) -> Result<(), ExportErr> {
+    let mut todo_file = File::read_from(todo)?;
+    let mut done_file = File::read_from(done)?;
+    todo_file.extract_completed_tasks(&mut |context| done_file.insert_task(context));
 
-    // file.extract_completed_tasks(&mut |t| extracted.push(t));
     Ok(())
 }
 
@@ -89,13 +85,10 @@ pub fn extract_completed(path: &Path) -> Result<(), ExportErr> {
 pub enum ExportErr {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-
     #[error("Invalid Markdown: {0}")]
     Markdown(markdown::message::Message),
-
     #[error("Missing home directory")]
     MissingHome,
-
     #[error("Task error: {0}")]
     Task(#[from] crate::task::TaskErr),
     #[error("Group error: {0}")]
@@ -104,30 +97,30 @@ pub enum ExportErr {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn display() {
-        let path = Path::new("/Users/user/notes/plan/todo.md");
-        let markdown = read_to_string(&path).unwrap();
-        let node = to_mdast(&markdown, &ParseOptions::gfm())
-            .map_err(ExportErr::Markdown)
-            .unwrap();
-        let mut file = File::new(node);
+    // #[test]
+    // fn display() {
+    //     let path = Path::new("/Users/user/notes/plan/todo.md");
+    //     let markdown = read_to_string(&path).unwrap();
+    //     let node = to_mdast(&markdown, &ParseOptions::gfm())
+    //         .map_err(ExportErr::Markdown)
+    //         .unwrap();
+    //     let mut file = File::new(node);
 
-        dbg!(file);
-        // let mut extracted = Vec::<(Task, task::Context)>::new();
-        // root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+    //     dbg!(file);
+    // let mut extracted = Vec::<(Task, task::Context)>::new();
+    // root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
 
-        // let string = root.to_string();
-        // println!("-----------------------------------------------------------------");
-        // println!("{}", string);
+    // let string = root.to_string();
+    // println!("-----------------------------------------------------------------");
+    // println!("{}", string);
 
-        // println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-        // for (task, context) in extracted {
-        //     println!("CONTEXT::{:?}", context);
-        //     println!("TASK::{}", task);
-        //     println!("~~~~~~~~~")
-        // }
-    }
+    // println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+    // for (task, context) in extracted {
+    //     println!("CONTEXT::{:?}", context);
+    //     println!("TASK::{}", task);
+    //     println!("~~~~~~~~~")
+    // }
+    // }
 }
