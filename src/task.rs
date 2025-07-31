@@ -64,6 +64,7 @@ impl Task {
             .collect()
     }
 
+    /// Recursive `Display` helper
     fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         write!(f, "{}-", "  ".repeat(level))?;
         if let Some(done) = self.done {
@@ -94,6 +95,15 @@ impl Parent<Task> for Task {
 
     fn children_mut(&mut self) -> &mut Vec<Task> {
         &mut self.sub_tasks
+    }
+
+    fn into_children(self) -> Vec<Task> {
+        self.sub_tasks
+    }
+
+    fn move_data_from(&mut self, other: &mut Task) {
+        assert!(self.text == other.text); // Sanity check
+        self.sessions.extend(other.sessions.drain(..));
     }
 }
 

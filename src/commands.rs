@@ -18,7 +18,7 @@ use std::{
     path::Path,
 };
 
-pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
+pub fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
     let markdown = read_to_string(md_path)?;
     let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let file = File::new(node)?;
@@ -73,11 +73,30 @@ pub fn export_from(md_path: &Path) -> Result<(), ExportErr> {
 }
 
 /// Moves all completed tasks to `todo.md`
-pub fn extract_completed(todo: &Path, done: &Path) -> Result<(), ExportErr> {
-    let mut todo_file = File::read_from(todo)?;
-    let mut done_file = File::read_from(done)?;
-    todo_file.extract_completed_tasks(&mut |context| done_file.insert_task(context));
+pub fn extract_completed(
+    todo_path: &Path,
+    done_path: &Path,
+    dry_run: bool,
+) -> Result<(), ExportErr> {
+    let mut todo = File::read_from(todo_path)?;
+    let mut done = File::read_from(done_path)?;
+    todo.extract_completed_tasks(&mut |context| done.insert_task(context));
+    todo.remove_empty_groups();
+    done.remove_empty_groups();
+    done.for_each_mut(&mut |mut group, _| {
+        <Group as Parent<Task>>::for_each_mut(&mut group, &mut |task, _| task.done = None);
+    });
 
+    if dry_run {
+        println!("TODO--------------------------------------------------------TODO");
+        println!("{}", todo);
+        println!("DONE--------------------------------------------------------DONE");
+        println!("{}", done);
+        println!("END----------------------------------------------------------END");
+    } else {
+        std::fs::write(todo_path, todo.to_string()).unwrap();
+        std::fs::write(done_path, done.to_string()).unwrap();
+    }
     Ok(())
 }
 
@@ -97,30 +116,31 @@ pub enum ExportErr {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
 
-    // #[test]
-    // fn display() {
-    //     let path = Path::new("/Users/user/notes/plan/todo.md");
-    //     let markdown = read_to_string(&path).unwrap();
-    //     let node = to_mdast(&markdown, &ParseOptions::gfm())
-    //         .map_err(ExportErr::Markdown)
-    //         .unwrap();
-    //     let mut file = File::new(node);
+    #[test]
+    // #[ignore]
+    fn extract_done_dry_run() {
+        extract_completed(
+            &Path::new("/Users/user/notes/plan/todo.md"),
+            &Path::new("/Users/user/notes/plan/done.md"),
+            true,
+        )
+        .unwrap();
+    }
 
-    //     dbg!(file);
-    // let mut extracted = Vec::<(Task, task::Context)>::new();
-    // root.extract_completed_tasks(&mut |t, c| extracted.push((t, c.clone())));
+    #[test]
+    #[ignore]
+    fn extract_done() {
+        extract_completed(
+            &Path::new("/Users/user/notes/plan/todo.md"),
+            &Path::new("/Users/user/notes/plan/done.md"),
+            false,
+        )
+        .unwrap();
+    }
 
-    // let string = root.to_string();
-    // println!("-----------------------------------------------------------------");
-    // println!("{}", string);
-
-    // println!("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-    // for (task, context) in extracted {
-    //     println!("CONTEXT::{:?}", context);
-    //     println!("TASK::{}", task);
-    //     println!("~~~~~~~~~")
-    // }
-    // }
+    // TODO: Test that sessions are merged
+    // TODO: Test that empty groups are removed
+    // TODO: Test that merging an existing child is working (perhaps in tree file)
 }

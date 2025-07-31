@@ -1,4 +1,4 @@
-mod export;
+mod commands;
 mod file;
 mod group;
 mod session;
@@ -12,7 +12,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::export::{export_from, extract_completed};
+use crate::commands::{export_ics_from, extract_completed};
 
 const EXPORT_ICS: &str = "tasktree.export";
 const EXTRACT_COMPLETED: &str = "tasktree.cleanup";
@@ -64,7 +64,7 @@ impl LanguageServer for Backend {
             EXPORT_ICS => {
                 let p = self.path.lock().await;
                 if let Some(ref path) = *p {
-                    if let Err(err) = export_from(path) {
+                    if let Err(err) = export_ics_from(path) {
                         self.client
                             .show_message(MessageType::ERROR, format!("🔴 {}", err))
                             .await;
@@ -84,7 +84,7 @@ impl LanguageServer for Backend {
                 if let Some(ref path) = *p {
                     // TODO: Implement finding `plan` root
                     if let Err(err) =
-                        extract_completed(path, &Path::new("/Users/user/notes/plan/done.md"))
+                        extract_completed(path, &Path::new("/Users/user/notes/plan/done.md"), true)
                     {
                         self.client
                             .show_message(MessageType::ERROR, format!("{}", err))

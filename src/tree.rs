@@ -1,22 +1,29 @@
-// # Two type tree
-//
-// ## Implmenentation
-//
-// - File is group root
-// - Group is group child
-// - Group is task root
-// - Task is task child
-
+/// # Two type tree
+///
+/// ## Implmenentation
+///
+/// - File is group root
+/// - Group is group child
+/// - Group is task root
+/// - Task is task child
+///
+/// ```rust
+/// let a = 5;
+/// ```
 use std::hash::Hash;
 use std::slice::Iter;
 
 /// Root of the tree structure parametrized by the type of children it contains
 pub trait Parent<C: Child>: Sized {
-    // Requirements
-
     fn children(&self) -> &Vec<C>;
 
     fn children_mut(&mut self) -> &mut Vec<C>;
+
+    fn into_children(self) -> Vec<C>;
+
+    // Merges contents (excluding children) with self
+    // The default impl is empty
+    fn move_data_from(&mut self, _: &mut Self) {}
 
     /// Finds a child, given it's id in O(n) time
     fn child_mut(&mut self, id: C::Id) -> Option<&mut C> {
@@ -32,20 +39,28 @@ pub trait Parent<C: Child>: Sized {
     }
 
     fn insert(&mut self, path: &[C::Id], child: C) -> &mut C {
-        if let Some((id, rest)) = path.split_first() {
+        if let Some((parent_id, rest)) = path.split_first() {
             // Add parent if it does not exist
-            if self.child_mut(id.clone()).is_none() {
-                self.children_mut().push(C::new(id.clone()));
+            if self.child_mut(parent_id.clone()).is_none() {
+                self.children_mut().push(C::new(parent_id.clone()));
             }
             // Get a reference to the parent, which now must exist
-            let c = self.child_mut(id.clone()).unwrap();
-            // Recursive call
-            c.insert(rest, child)
+            self.child_mut(parent_id.clone())
+                .expect("Parent was inserted")
+                .insert(rest, child)
         } else {
-            // No path left - push child itself
-            // TODO: Need to merge, if already exists
-            self.children_mut().push(child);
-            self.children_mut().last_mut().unwrap()
+            let id = child.id();
+            if let Some(existing) = self.child_mut(child.id()) {
+                // Make child mutable
+                let mut child = child;
+                existing.move_data_from(&mut child);
+                for grand_child in child.into_children() {
+                    existing.insert(&[], grand_child);
+                }
+            } else {
+                self.children_mut().push(child);
+            }
+            self.child_mut(id).expect("Child was inserted")
         }
     }
 
@@ -60,14 +75,23 @@ pub trait Parent<C: Child>: Sized {
         }
     }
 
-    fn for_each_mut<A>(&mut self, path: &mut Vec<C::Id>, action: &mut A)
+    fn for_each_mut<A>(&mut self, action: &mut A)
+    where
+        A: FnMut(&mut C, &Vec<C::Id>),
+    {
+        self.for_each_mut_internal(&mut vec![], action);
+    }
+
+    #[doc(hidden)]
+    fn for_each_mut_internal<A>(&mut self, path: &mut Vec<C::Id>, action: &mut A)
     where
         A: FnMut(&mut C, &Vec<C::Id>),
     {
         self.children_mut().iter_mut().for_each(|child| {
             action(child, &path);
             path.push(child.id());
-            child.for_each_mut(path, action);
+            child.for_each_mut_internal(path, action);
+            path.pop();
         })
     }
 
@@ -206,6 +230,10 @@ mod tests {
         fn children_mut(&mut self) -> &mut Vec<TestChild> {
             &mut self.children
         }
+
+        fn into_children(self) -> Vec<TestChild> {
+            self.children
+        }
     }
 
     #[derive(Debug, PartialEq)]
@@ -236,6 +264,10 @@ mod tests {
 
         fn children(&self) -> &Vec<TestChild> {
             &self.children
+        }
+
+        fn into_children(self) -> Vec<Self> {
+            self.children
         }
     }
 

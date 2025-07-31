@@ -20,11 +20,24 @@ impl Group {
         for task in &self.tasks {
             write!(f, "{}", task)?;
         }
-        write!(f, "\n")?;
+        if !&self.tasks.is_empty() {
+            write!(f, "\n")?;
+        }
         for child in &self.sub_groups {
             child.fmt_recursive(f, level + 1)?;
         }
         Ok(())
+    }
+
+    pub fn remove_empty(&mut self) {
+        for sub_group in &mut self.sub_groups {
+            sub_group.remove_empty();
+        }
+        self.sub_groups.retain(|g| g.is_empty());
+    }
+
+    pub fn is_empty(&self) -> bool {
+        !self.sub_groups.is_empty() || !self.tasks.is_empty()
     }
 }
 
@@ -42,6 +55,10 @@ impl Parent<Group> for Group {
 
     fn children_mut(&mut self) -> &mut Vec<Self> {
         &mut self.sub_groups
+    }
+
+    fn into_children(self) -> Vec<Group> {
+        self.sub_groups
     }
 }
 
@@ -67,5 +84,9 @@ impl Parent<Task> for Group {
 
     fn children_mut(&mut self) -> &mut Vec<Task> {
         &mut self.tasks
+    }
+
+    fn into_children(self) -> Vec<Task> {
+        self.tasks
     }
 }

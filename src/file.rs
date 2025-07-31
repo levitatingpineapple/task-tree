@@ -67,7 +67,7 @@ impl File {
     where
         F: FnMut(Context),
     {
-        self.for_each_mut(&mut vec![], &mut |group, group_path| {
+        self.for_each_mut(&mut |group, group_path| {
             let group_id = group.id();
             <Group as Parent<Task>>::extract_if(
                 group,
@@ -83,6 +83,13 @@ impl File {
                 &|task| task.done == Some(true),
             );
         });
+    }
+
+    pub fn remove_empty_groups(&mut self) {
+        for sub_group in &mut self.sub_groups {
+            sub_group.remove_empty();
+        }
+        self.sub_groups.retain(|g| g.is_empty());
     }
 }
 
@@ -109,6 +116,10 @@ impl Parent<Group> for File {
 
     fn children_mut(&mut self) -> &mut Vec<Group> {
         &mut self.sub_groups
+    }
+
+    fn into_children(self) -> Vec<Group> {
+        self.sub_groups
     }
 }
 
