@@ -1,4 +1,6 @@
 use crate::{
+    Context,
+    config::CalDAV,
     file::File,
     group::Group,
     session,
@@ -23,16 +25,13 @@ pub async fn upload(
     uid: String,
     client: &reqwest::Client,
     calendar: ICalendar<'_>,
+    caldav: &CalDAV,
 ) -> Result<(), ExportErr> {
-    // TODO: Move hadcoded values to config
-    let base_url = "base_url";
-    let username = "user";
-    let password = "password";
-    let url = format!("{}/{}.ics", base_url, uid);
+    let url = format!("{}/{}.ics", caldav.url, uid);
     let calendar_data = calendar.to_string();
     let status = client
         .put(&url)
-        .basic_auth(username, Some(password))
+        .basic_auth(&caldav.user, Some(&caldav.pass))
         .header("Content-Type", "text/calendar; charset=utf-8")
         .body(calendar_data)
         .send()
@@ -48,8 +47,8 @@ pub async fn upload(
     }
 }
 
-pub async fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
-    let markdown = read_to_string(md_path)?;
+pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
+    let markdown = read_to_string(context.workspace.path(crate::config::Path::Todo))?;
     let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let file = File::new(node)?;
     let now = Local::now();
@@ -86,7 +85,7 @@ pub async fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
                 }
                 let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
                 calendar.add_event(event);
-                upload(uid, &http_client, calendar).await?;
+                upload(uid, &http_client, calendar, &context.config.caldav).await?;
             }
         }
     }
@@ -94,11 +93,7 @@ pub async fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
 }
 
 /// Moves all completed tasks to `todo.md`
-pub fn extract_completed(
-    todo_path: &Path,
-    done_path: &Path,
-    dry_run: bool,
-) -> Result<(), ExportErr> {
+pub fn extract_completed(todo_path: &Path, done_path: &Path) -> Result<(), ExportErr> {
     let mut todo = File::read_from(todo_path)?;
     let mut done = File::read_from(done_path)?;
     todo.extract_completed_tasks(&mut |context| done.insert_task(context));
@@ -107,16 +102,8 @@ pub fn extract_completed(
     done.for_each_mut(&mut |mut group, _| {
         <Group as Parent<Task>>::for_each_mut(&mut group, &mut |task, _| task.done = None);
     });
-    if dry_run {
-        println!("TODO--------------------------------------------------------TODO");
-        println!("{}", todo);
-        println!("DONE--------------------------------------------------------DONE");
-        println!("{}", done);
-        println!("END----------------------------------------------------------END");
-    } else {
-        std::fs::write(todo_path, todo.to_string()).unwrap();
-        std::fs::write(done_path, done.to_string()).unwrap();
-    }
+    std::fs::write(todo_path, todo.to_string()).unwrap();
+    std::fs::write(done_path, done.to_string()).unwrap();
     Ok(())
 }
 
@@ -139,27 +126,6 @@ pub enum ExportErr {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn extract_done_dry_run() {
-        extract_completed(
-            &Path::new("/Users/user/notes/plan/todo.md"),
-            &Path::new("/Users/user/notes/plan/done.md"),
-            true,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    #[ignore]
-    fn extract_done() {
-        extract_completed(
-            &Path::new("/Users/user/notes/plan/todo.md"),
-            &Path::new("/Users/user/notes/plan/done.md"),
-            false,
-        )
-        .unwrap();
-    }
 
     #[tokio::test]
     async fn export() {
