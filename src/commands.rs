@@ -6,24 +6,54 @@ use crate::{
     tree::{Child, Parent},
 };
 use chrono::Local;
-use dirs::home_dir;
 use ics::{
     Event, ICalendar,
     properties::{RRule, Sequence, Summary},
 };
 use markdown::{ParseOptions, to_mdast};
+use reqwest;
 use std::{
-    fs::{create_dir_all, read_to_string},
+    fmt::Debug,
+    fs::read_to_string,
     hash::{DefaultHasher, Hash, Hasher},
     path::Path,
 };
 
-pub fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
+pub async fn upload(
+    uid: String,
+    client: &reqwest::Client,
+    calendar: ICalendar<'_>,
+) -> Result<(), ExportErr> {
+    // TODO: Move hadcoded values to config
+    let base_url = "base_url";
+    let username = "user";
+    let password = "password";
+    let url = format!("{}/{}.ics", base_url, uid);
+    let calendar_data = calendar.to_string();
+    let status = client
+        .put(&url)
+        .basic_auth(username, Some(password))
+        .header("Content-Type", "text/calendar; charset=utf-8")
+        .body(calendar_data)
+        .send()
+        .await?
+        .status();
+    if status.is_success() {
+        Ok(())
+    } else {
+        Err(ExportErr::CalDAV(format!(
+            "Upload failed with status: {}",
+            status
+        )))
+    }
+}
+
+pub async fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
     let markdown = read_to_string(md_path)?;
     let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let file = File::new(node)?;
-    let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
     let now = Local::now();
+    let http_client = reqwest::Client::new();
     // Sequence hack - Apple calendar will only update event _once_(!)
     // even when `DTSTAMP` and/or `LAST-MODIFIED` are incremented
     // setting sequence number to current unix timestamp
@@ -32,43 +62,34 @@ pub fn export_ics_from(md_path: &Path) -> Result<(), ExportErr> {
     let datestamp = session::ics_format(&now);
     for group_item in <File as Parent<Group>>::iter(&file) {
         for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
-            task_item
-                .child
-                .sessions
-                .iter()
-                .enumerate()
-                .for_each(|(index, session)| {
-                    // Construct unique event id using static hasher
-                    let mut hasher = DefaultHasher::new();
-                    for parent in &group_item.parent_path {
-                        parent.hash(&mut hasher);
-                    }
-                    group_item.child.id().hash(&mut hasher);
-                    for parent in &task_item.parent_path {
-                        parent.hash(&mut hasher);
-                    }
-                    task_item.child.id().hash(&mut hasher);
-                    index.hash(&mut hasher);
-                    let id = hasher.finish();
-                    // Populate and return the event
-                    let mut event = Event::new(format!("{:x}", id), datestamp.clone());
-                    event.push(Summary::new(task_item.child.text.clone()));
-                    event.push(session.dt_start());
-                    event.push(session.dt_end());
-                    event.push(sequence.clone());
-                    if let Some(rrule) = &session.repeat {
-                        event.push(RRule::new(rrule.to_string()));
-                    }
-                    calendar.add_event(event);
-                });
+            for (index, session) in task_item.child.sessions.iter().enumerate() {
+                // Construct unique event id using static hasher
+                let mut hasher = DefaultHasher::new();
+                for parent in &group_item.parent_path {
+                    parent.hash(&mut hasher);
+                }
+                group_item.child.id().hash(&mut hasher);
+                for parent in &task_item.parent_path {
+                    parent.hash(&mut hasher);
+                }
+                task_item.child.id().hash(&mut hasher);
+                index.hash(&mut hasher);
+                let uid = format!("{:x}", hasher.finish());
+                // Populate and return the event
+                let mut event = Event::new(uid.clone(), datestamp.clone());
+                event.push(Summary::new(task_item.child.text.clone()));
+                event.push(session.dt_start());
+                event.push(session.dt_end());
+                event.push(sequence.clone());
+                if let Some(repeat) = &session.repeat {
+                    event.push(RRule::new(repeat.rule.to_string()));
+                }
+                let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
+                calendar.add_event(event);
+                upload(uid, &http_client, calendar).await?;
+            }
         }
     }
-    let ics_path = home_dir()
-        .ok_or(ExportErr::MissingHome)?
-        .join(".cache/task-tree/todo.ics");
-    let _ = create_dir_all(ics_path.parent().expect("parent"));
-    calendar.save_file(&ics_path)?;
-    open::that(&ics_path).unwrap();
     Ok(())
 }
 
@@ -86,7 +107,6 @@ pub fn extract_completed(
     done.for_each_mut(&mut |mut group, _| {
         <Group as Parent<Task>>::for_each_mut(&mut group, &mut |task, _| task.done = None);
     });
-
     if dry_run {
         println!("TODO--------------------------------------------------------TODO");
         println!("{}", todo);
@@ -106,12 +126,14 @@ pub enum ExportErr {
     Io(#[from] std::io::Error),
     #[error("Invalid Markdown: {0}")]
     Markdown(markdown::message::Message),
-    #[error("Missing home directory")]
-    MissingHome,
     #[error("Task error: {0}")]
     Task(#[from] crate::task::TaskErr),
     #[error("Group error: {0}")]
     File(#[from] crate::file::FileErr),
+    #[error("HTTP request error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+    #[error("CalDAV error: {0}")]
+    CalDAV(String),
 }
 
 #[cfg(test)]
@@ -119,7 +141,6 @@ mod tests {
     use super::*;
 
     #[test]
-    // #[ignore]
     fn extract_done_dry_run() {
         extract_completed(
             &Path::new("/Users/user/notes/plan/todo.md"),
@@ -138,6 +159,13 @@ mod tests {
             false,
         )
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn export() {
+        export_ics_from(&Path::new("/Users/user/notes/plan/todo.md"))
+            .await
+            .unwrap()
     }
 
     // TODO: Test that sessions are merged

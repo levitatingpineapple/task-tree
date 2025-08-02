@@ -38,7 +38,9 @@ impl LanguageServer for Backend {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec![EXPORT_ICS.to_string()],
+                    commands: [EXPORT_ICS, EXTRACT_COMPLETED]
+                        .map(|str| str.to_string())
+                        .to_vec(),
                     work_done_progress_options: Default::default(),
                 }),
                 ..Default::default()
@@ -64,7 +66,7 @@ impl LanguageServer for Backend {
             EXPORT_ICS => {
                 let p = self.path.lock().await;
                 if let Some(ref path) = *p {
-                    if let Err(err) = export_ics_from(path) {
+                    if let Err(err) = export_ics_from(path).await {
                         self.client
                             .show_message(MessageType::ERROR, format!("🔴 {}", err))
                             .await;
@@ -84,7 +86,7 @@ impl LanguageServer for Backend {
                 if let Some(ref path) = *p {
                     // TODO: Implement finding `plan` root
                     if let Err(err) =
-                        extract_completed(path, &Path::new("/Users/user/notes/plan/done.md"), true)
+                        extract_completed(path, &Path::new("/Users/user/notes/plan/done.md"), false)
                     {
                         self.client
                             .show_message(MessageType::ERROR, format!("{}", err))

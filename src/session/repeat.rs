@@ -1,6 +1,6 @@
 use super::range::{Bound, Range, RangeErr};
 use chrono::{DateTime, Datelike, Local, Timelike};
-use rrule::{Frequency, RRule, RRuleError};
+use rrule::{Frequency, NWeekday, RRule, RRuleError, Weekday};
 use std::fmt::{self, Display};
 use std::{fmt::Formatter, num::ParseIntError, str::FromStr};
 
@@ -13,7 +13,25 @@ impl Repeat {
     pub fn from_str_in_range(str: &str, range: &Range) -> Result<Repeat, RepeatErr> {
         let mut parts = str.splitn(2, "-"); // components-until
         let mut body_parts = parts.next().expect("first").split("_");
-        let mut rule = RRule::new(Frequency::from_str(body_parts.next().expect("first"))?);
+        let first_part = body_parts.next().expect("first");
+        let mut rule = match Frequency::from_str(first_part) {
+            Ok(frequency) => RRule::new(frequency),
+            Err(_) => first_part
+                .split(',')
+                .map(|s| {
+                    from_str(s)
+                        .map(|wd| NWeekday::new(None, wd))
+                        .ok_or(RepeatErr::Frequency)
+                })
+                .collect::<Result<Vec<NWeekday>, RepeatErr>>()
+                .and_then(|nwd| {
+                    if nwd.is_empty() {
+                        Err(RepeatErr::Frequency)
+                    } else {
+                        Ok(RRule::new(Frequency::Weekly).by_weekday(nwd))
+                    }
+                })?,
+        };
         // Decode `%` and `#` components
         while let Some(part) = body_parts.next() {
             if let Some(prefix) = part.strip_prefix('%') {
@@ -34,7 +52,23 @@ impl Repeat {
 
 impl Display for Repeat {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.rule.get_freq().to_string().to_lowercase())?;
+        if self.rule.get_by_weekday().len() > 1 {
+            // TODO: This will not correctly format all Rrules
+            // repeat should be it's own type with delayed validation
+            let mut first = true;
+            for weekday in self.rule.get_by_weekday() {
+                let wd = format!("{}", weekday);
+                if first {
+                    first = false;
+                } else {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", wd.to_lowercase())?;
+            }
+        } else {
+            write!(f, "{}", self.rule.get_freq().to_string().to_lowercase())?;
+        }
+
         let interval = self.rule.get_interval();
         if interval != 1 {
             write!(f, "_%{}", interval)?;
@@ -60,10 +94,23 @@ fn until_format(dt: &DateTime<Local>) -> &'static str {
                           return "%y";
 }
 
+fn from_str(str: &str) -> Option<Weekday> {
+    match str {
+        "mo" => Some(Weekday::Mon),
+        "tu" => Some(Weekday::Tue),
+        "we" => Some(Weekday::Wed),
+        "th" => Some(Weekday::Thu),
+        "fr" => Some(Weekday::Fri),
+        "sa" => Some(Weekday::Sat),
+        "su" => Some(Weekday::Sun),
+        _ => None,
+    }
+}
+
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum RepeatErr {
-    #[error("Invalid frequency: {0}")]
-    Frequency(#[from] rrule::ParseError),
+    #[error("Invalid frequency")]
+    Frequency,
     #[error("Not an integer: {0}")]
     ParseInt(#[from] ParseIntError),
     #[error("Invalid repeat rule: {0}")]
@@ -100,6 +147,10 @@ mod tests {
         test(
             "weekly_%2-25/08",
             "FREQ=WEEKLY;UNTIL=20250801T000000Z;INTERVAL=2;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
+        )?;
+        test(
+            "mo,we,su_#5",
+            "FREQ=WEEKLY;COUNT=5;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO,WE,SU",
         )?;
         Ok(())
     }
