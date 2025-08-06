@@ -11,7 +11,7 @@ use context::{Config, Context};
 use std::fs;
 use tokio::io::{stdin, stdout};
 use tokio::sync::Mutex;
-use tower_lsp::jsonrpc::{Error, Result};
+use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types::InitializeParams;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -36,25 +36,36 @@ struct Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
         // Find provided workspace root
         let workspace = params
             .workspace_folders
             .as_ref()
             .and_then(|folders| folders.first())
             .and_then(|folder| folder.uri.to_file_path().ok())
-            .ok_or_else(|| Error::invalid_params("No workspace folder found"))?;
+            .ok_or_else(|| jsonrpc::Error::invalid_params("No workspace folder found"))?;
         // Find and load .task-tree.toml config file
         let config: Config = fs::read_to_string(&workspace.join(".task-tree.toml"))
-            .map_err(|_| Error::invalid_params("Failed to find .task-tree.toml file"))
+            .map_err(|_| jsonrpc::Error::invalid_params("Failed to find .task-tree.toml file"))
             .and_then(|content| {
                 toml::from_str(&content).map_err(|e| {
-                    Error::invalid_params(format!("Failed to parse .task-tree.toml: {}", e))
+                    jsonrpc::Error::invalid_params(format!(
+                        "Failed to parse .task-tree.toml: {}",
+                        e
+                    ))
                 })
             })?;
         *self.context.lock().await = Some(Context::new(config, workspace));
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                            include_text: Some(false),
+                        })),
+                        ..Default::default()
+                    },
+                )),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: [EXPORT_ICS, EXTRACT_COMPLETED]
                         .map(|str| str.to_string())
@@ -67,37 +78,53 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn shutdown(&self) -> Result<()> {
+    async fn shutdown(&self) -> jsonrpc::Result<()> {
         Ok(())
+    }
+
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        if let Ok(file_path) = params.text_document.uri.to_file_path() {
+            if let Some(ref context) = *self.context.lock().await {
+                if file_path == context.todo() {
+                    if let Err(err) = export_ics(context).await {
+                        self.client
+                            .show_message(MessageType::ERROR, format!("🌳 {}", err))
+                            .await;
+                    } else {
+                        self.client
+                            .show_message(MessageType::INFO, format!("🌳 {}", "Calendar exported."))
+                            .await;
+                    }
+                }
+            }
+        }
     }
 
     async fn execute_command(
         &self,
         params: ExecuteCommandParams,
-    ) -> Result<Option<serde_json::Value>> {
-        let lock = self.context.lock().await;
-
-        if let Some(ref context) = *lock {
+    ) -> jsonrpc::Result<Option<serde_json::Value>> {
+        if let Some(ref context) = *self.context.lock().await {
             match params.command.as_str() {
                 EXPORT_ICS => {
                     if let Err(err) = export_ics(context).await {
                         self.client
-                            .show_message(MessageType::ERROR, format!("🔴 {}", err))
+                            .show_message(MessageType::ERROR, format!("🌳 {}", err))
                             .await;
                     } else {
                         self.client
-                            .show_message(MessageType::INFO, format!("🟢 {}", "Exported!"))
+                            .show_message(MessageType::INFO, format!("🌳 {}", "Calendar exported."))
                             .await;
                     }
                 }
                 EXTRACT_COMPLETED => {
-                    if let Err(err) = extract_completed(&context.todo(), &context.done()) {
+                    if let Err(err) = extract_completed(context) {
                         self.client
                             .show_message(MessageType::ERROR, format!("{}", err))
                             .await;
                     } else {
                         self.client
-                            .show_message(MessageType::INFO, format!("🟢 {}", "Extracted!"))
+                            .show_message(MessageType::INFO, format!("🌳 {}", "Moved completed"))
                             .await;
                     }
                 }

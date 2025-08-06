@@ -17,10 +17,9 @@ use std::{
     fmt::Debug,
     fs::read_to_string,
     hash::{DefaultHasher, Hash, Hasher},
-    path::Path,
 };
 
-pub async fn upload(
+async fn upload(
     uid: String,
     client: &reqwest::Client,
     calendar: ICalendar<'_>,
@@ -92,17 +91,19 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
 }
 
 /// Moves all completed tasks to `todo.md`
-pub fn extract_completed(todo_path: &Path, done_path: &Path) -> Result<(), ExportErr> {
-    let mut todo = File::read_from(todo_path)?;
-    let mut done = File::read_from(done_path)?;
+pub fn extract_completed(context: &Context) -> Result<(), ExportErr> {
+    let todo_path = context.todo();
+    let done_path = context.done();
+    let mut todo = File::read_from(&todo_path)?;
+    let mut done = File::read_from(&done_path)?;
     todo.extract_completed_tasks(&mut |context| done.insert_task(context));
     todo.remove_empty_groups();
     done.remove_empty_groups();
     done.for_each_mut(&mut |mut group, _| {
         <Group as Parent<Task>>::for_each_mut(&mut group, &mut |task, _| task.done = None);
     });
-    std::fs::write(todo_path, todo.to_string()).unwrap();
-    std::fs::write(done_path, done.to_string()).unwrap();
+    std::fs::write(&todo_path, todo.to_string()).unwrap();
+    std::fs::write(&done_path, done.to_string()).unwrap();
     Ok(())
 }
 
