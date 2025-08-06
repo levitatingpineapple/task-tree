@@ -1,6 +1,5 @@
 use crate::{
-    Context,
-    config::CalDAV,
+    context::{CalDAV, Context},
     file::File,
     group::Group,
     session,
@@ -48,7 +47,7 @@ pub async fn upload(
 }
 
 pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
-    let markdown = read_to_string(context.workspace.path(crate::config::Path::Todo))?;
+    let markdown = read_to_string(&context.todo())?;
     let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let file = File::new(node)?;
     let now = Local::now();
@@ -85,7 +84,7 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
                 }
                 let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
                 calendar.add_event(event);
-                upload(uid, &http_client, calendar, &context.config.caldav).await?;
+                upload(uid, &http_client, calendar, &context.calendar()).await?;
             }
         }
     }
@@ -121,20 +120,4 @@ pub enum ExportErr {
     Reqwest(#[from] reqwest::Error),
     #[error("CalDAV error: {0}")]
     CalDAV(String),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn export() {
-        export_ics_from(&Path::new("/Users/user/notes/plan/todo.md"))
-            .await
-            .unwrap()
-    }
-
-    // TODO: Test that sessions are merged
-    // TODO: Test that empty groups are removed
-    // TODO: Test that merging an existing child is working (perhaps in tree file)
 }
