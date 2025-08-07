@@ -9,7 +9,7 @@ use crate::{
 use chrono::Local;
 use ics::{
     Event, ICalendar,
-    properties::{RRule, Sequence, Summary},
+    properties::{LastModified, RRule, Summary},
 };
 use markdown::{ParseOptions, to_mdast};
 use reqwest;
@@ -51,11 +51,6 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     let file = File::new(node)?;
     let now = Local::now();
     let http_client = reqwest::Client::new();
-    // Sequence hack - Apple calendar will only update event _once_(!)
-    // even when `DTSTAMP` and/or `LAST-MODIFIED` are incremented
-    // setting sequence number to current unix timestamp
-    // seems to be the only way to update events wihout retaining any state
-    let sequence = Sequence::new(now.timestamp().to_string());
     let datestamp = session::ics_format(&now);
     for group_item in <File as Parent<Group>>::iter(&file) {
         for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
@@ -77,7 +72,7 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
                 event.push(Summary::new(task_item.child.text.clone()));
                 event.push(session.dt_start());
                 event.push(session.dt_end());
-                event.push(sequence.clone());
+                event.push(LastModified::new(datestamp.clone()));
                 if let Some(repeat) = &session.repeat {
                     event.push(RRule::new(repeat.rule.to_string()));
                 }
