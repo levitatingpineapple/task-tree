@@ -1,7 +1,7 @@
 mod range;
 mod repeat;
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use ics::{
     parameters,
     properties::{DtEnd, DtStart},
@@ -67,8 +67,8 @@ impl Display for Session {
     }
 }
 
-/// Formats UTC DateTime to ICS ZULU format with trailing Z
-pub fn ics_format(dt: &DateTime<Local>) -> String {
+/// Normalizes time to UTC-0 (ZULU) and formats for ICS with trailing Z
+pub fn ics_format<T: TimeZone>(dt: &DateTime<T>) -> String {
     dt.with_timezone(&Utc).format("%Y%m%dT%H%M%SZ").to_string()
 }
 

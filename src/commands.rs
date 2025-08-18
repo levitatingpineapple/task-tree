@@ -6,7 +6,7 @@ use crate::{
     task::Task,
     tree::{Child, Parent},
 };
-use chrono::Local;
+use chrono::Utc;
 use ics::{
     Event, ICalendar,
     properties::{LastModified, RRule, Summary},
@@ -49,7 +49,7 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     let markdown = read_to_string(&context.todo())?;
     let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
     let file = File::new(node)?;
-    let now = Local::now();
+    let now = Utc::now();
     let http_client = reqwest::Client::new();
     let datestamp = session::ics_format(&now);
     for group_item in <File as Parent<Group>>::iter(&file) {
@@ -78,7 +78,7 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
                 }
                 let mut calendar = ICalendar::new("2.0", "-//Lepi//Task Tree 0.0.1//EN");
                 calendar.add_event(event);
-                upload(uid, &http_client, calendar, &context.calendar()).await?;
+                upload(uid, &http_client, calendar, &context.config().caldav).await?;
             }
         }
     }

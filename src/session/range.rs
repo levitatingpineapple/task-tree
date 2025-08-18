@@ -1,7 +1,8 @@
 use chrono::{
-    DateTime, Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeZone, Timelike,
-    Utc, offset::LocalResult,
+    DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeZone, Timelike, Utc,
+    offset::LocalResult,
 };
+use chrono_tz::Tz;
 use std::{
     fmt::{self, Display, Formatter},
     ops::{self},
@@ -11,7 +12,7 @@ use std::{
 #[derive(Debug, PartialEq)]
 pub enum Range {
     AllDay(ops::Range<NaiveDate>),
-    Timed(ops::Range<DateTime<Local>>),
+    Timed(ops::Range<DateTime<Tz>>),
 }
 
 impl Range {
@@ -95,7 +96,7 @@ impl Display for Range {
 #[derive(Debug, PartialEq)]
 pub enum Bound {
     AllDay(NaiveDate),
-    Timed(DateTime<Local>),
+    Timed(DateTime<Tz>),
 }
 
 /// Represents start or end bound of the time `Range`
@@ -176,9 +177,11 @@ fn write(
 }
 
 /// Parses date time with omitted default suffix
-fn date_time(str: &str) -> Result<DateTime<Local>, RangeErr> {
+fn date_time(str: &str) -> Result<DateTime<Tz>, RangeErr> {
     let overlay = overlay(str, "XX/01/01_00:00:00", Align::Leading);
-    local(&NaiveDateTime::parse_from_str(&overlay?, "%y/%m/%d_%H:%M:%S").map_err(RangeErr::Parse)?)
+    in_timezone(
+        &NaiveDateTime::parse_from_str(&overlay?, "%y/%m/%d_%H:%M:%S").map_err(RangeErr::Parse)?,
+    )
 }
 
 /// Parses date with omitted default suffix
@@ -207,10 +210,11 @@ fn overlay(over: &str, base: &str, align: Align) -> Result<String, RangeErr> {
     }
 }
 
-/// Interprets `NaiveDateTime` as `Local`.
+/// Interprets `NaiveDateTime` in configured timezone.
 /// Throws error if time is ambiguous or invalid due to winter/summer time switch
-pub fn local(ndt: &NaiveDateTime) -> Result<DateTime<Local>, RangeErr> {
-    match Local.from_local_datetime(ndt) {
+pub fn in_timezone(ndt: &NaiveDateTime) -> Result<DateTime<Tz>, RangeErr> {
+    let tz = crate::context().config().timezone;
+    match ndt.and_local_timezone(tz) {
         LocalResult::Single(single) => Ok(single),
         LocalResult::Ambiguous(_, _) => Err(RangeErr::AmbiguousInTimezone),
         LocalResult::None => Err(RangeErr::InvalidInTimezone),
@@ -276,10 +280,10 @@ mod tests {
             NaiveDate::from_ymd_opt(y, m, d).unwrap()
         }
 
-        fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
+        fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Tz> {
             let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
             let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
-            local(&NaiveDateTime::new(date, time)).unwrap()
+            in_timezone(&NaiveDateTime::new(date, time)).unwrap()
         }
     }
 

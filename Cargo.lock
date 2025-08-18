@@ -158,6 +158,7 @@ dependencies = [
  "chrono",
  "chrono-tz-build",
  "phf",
+ "serde",
 ]
 
 [[package]]
@@ -1619,6 +1620,7 @@ name = "task-tree"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "dirs",
  "ics",
  "indoc",

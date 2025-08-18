@@ -1,5 +1,6 @@
 use super::range::{Bound, Range, RangeErr};
-use chrono::{DateTime, Datelike, Local, Timelike};
+use chrono::{DateTime, Datelike, Timelike};
+use chrono_tz::Tz;
 use rrule::{Frequency, NWeekday, RRule, RRuleError, Weekday};
 use std::fmt::{self, Display};
 use std::{fmt::Formatter, num::ParseIntError, str::FromStr};
@@ -77,7 +78,8 @@ impl Display for Repeat {
             write!(f, "_#{}", count)?;
         }
         if let Some(until) = self.rule.get_until() {
-            let dt = until.with_timezone(&chrono::Local);
+            let tz = crate::context().config().timezone;
+            let dt = until.with_timezone(&tz);
             write!(f, "-{}", dt.format(until_format(&dt)).to_string())?;
         }
         Ok(())
@@ -85,7 +87,7 @@ impl Display for Repeat {
 }
 
 #[rustfmt::skip]
-fn until_format(dt: &DateTime<Local>) -> &'static str {
+fn until_format(dt: &DateTime<Tz>) -> &'static str {
     if dt.second() != 0 { return "%y/%m/%d_%H:%M:%S"; }
     if dt.minute() != 0 { return "%y/%m/%d_%H:%M"; }
     if dt.hour()   != 0 { return "%y/%m/%d_%H"; }
@@ -122,7 +124,7 @@ pub enum RepeatErr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, NaiveTime};
+    use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
     use serial_test::serial;
 
     #[test]
@@ -167,9 +169,9 @@ mod tests {
         Ok(())
     }
 
-    fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Local> {
+    fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Tz> {
         let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
         let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
-        crate::session::range::local(&NaiveDateTime::new(date, time)).unwrap()
+        crate::session::range::in_timezone(&NaiveDateTime::new(date, time)).unwrap()
     }
 }

@@ -1,3 +1,4 @@
+use chrono_tz::Tz;
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -20,8 +21,8 @@ impl Context {
         self.workspace.join(&self.config.paths.done)
     }
 
-    pub fn calendar(&self) -> &CalDAV {
-        &self.config.caldav
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 }
 
@@ -30,6 +31,7 @@ pub struct Config {
     pub caldav: CalDAV,
     #[serde(default)]
     paths: Paths,
+    pub timezone: Tz,
 }
 
 #[derive(Deserialize, Debug)]

@@ -6,11 +6,11 @@ mod session;
 mod task;
 mod tree;
 
-use crate::commands::{export_ics, extract_completed};
+use commands::{export_ics, extract_completed};
 use context::{Config, Context};
 use std::fs;
 use tokio::io::{stdin, stdout};
-use tokio::sync::Mutex;
+use tokio::sync::OnceCell;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types::InitializeParams;
 use tower_lsp::lsp_types::*;
@@ -21,17 +21,19 @@ const EXTRACT_COMPLETED: &str = "tasktree.cleanup";
 
 #[tokio::main]
 async fn main() {
-    let (service, socket) = LspService::new(|client| Backend {
-        client,
-        context: Mutex::new(None),
-    });
+    let (service, socket) = LspService::new(|client| Backend { client });
     Server::new(stdin(), stdout(), socket).serve(service).await;
 }
 
 #[derive(Debug)]
 struct Backend {
     client: Client,
-    context: Mutex<Option<Context>>,
+}
+
+static CONTEXT: OnceCell<Context> = OnceCell::const_new();
+
+pub fn context() -> &'static Context {
+    CONTEXT.get().expect("initialised")
 }
 
 #[tower_lsp::async_trait]
@@ -55,7 +57,9 @@ impl LanguageServer for Backend {
                     ))
                 })
             })?;
-        *self.context.lock().await = Some(Context::new(config, workspace));
+        CONTEXT
+            .set(Context::new(config, workspace))
+            .expect("Init should be called only once");
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
@@ -84,7 +88,7 @@ impl LanguageServer for Backend {
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         if let Ok(file_path) = params.text_document.uri.to_file_path() {
-            if let Some(ref context) = *self.context.lock().await {
+            if let Some(context) = CONTEXT.get() {
                 if file_path == context.todo() {
                     if let Err(err) = export_ics(context).await {
                         self.client
@@ -104,7 +108,7 @@ impl LanguageServer for Backend {
         &self,
         params: ExecuteCommandParams,
     ) -> jsonrpc::Result<Option<serde_json::Value>> {
-        if let Some(ref context) = *self.context.lock().await {
+        if let Some(context) = CONTEXT.get() {
             match params.command.as_str() {
                 EXPORT_ICS => {
                     if let Err(err) = export_ics(context).await {
