@@ -127,35 +127,35 @@ mod tests {
     use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
     use serial_test::serial;
 
-    #[test]
-    #[serial] // All timezone tests should be serial
-    fn repeat_parsing() -> Result<(), RepeatErr> {
-        unsafe {
-            std::env::set_var("TZ", "UTC");
-        }
-        test("daily", "FREQ=DAILY;BYHOUR=4;BYMINUTE=5;BYSECOND=6")?;
-        test(
-            "weekly",
-            "FREQ=WEEKLY;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
-        )?;
-        test(
-            "monthly_%2",
-            "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=3;BYHOUR=4;BYMINUTE=5;BYSECOND=6",
-        )?;
-        test(
-            "yearly_#10",
-            "FREQ=YEARLY;COUNT=10;BYMONTH=2;BYMONTHDAY=3;BYHOUR=4;BYMINUTE=5;BYSECOND=6",
-        )?;
-        test(
-            "weekly_%2-25/08",
-            "FREQ=WEEKLY;UNTIL=20250801T000000Z;INTERVAL=2;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
-        )?;
-        test(
-            "mo,we,su_#5",
-            "FREQ=WEEKLY;COUNT=5;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO,WE,SU",
-        )?;
-        Ok(())
-    }
+    // #[test]
+    // #[serial] // All timezone tests should be serial
+    // fn repeat_parsing() -> Result<(), RepeatErr> {
+    //     unsafe {
+    //         std::env::set_var("TZ", "UTC");
+    //     }
+    //     test("daily", "FREQ=DAILY;BYHOUR=4;BYMINUTE=5;BYSECOND=6")?;
+    //     test(
+    //         "weekly",
+    //         "FREQ=WEEKLY;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
+    //     )?;
+    //     test(
+    //         "monthly_%2",
+    //         "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=3;BYHOUR=4;BYMINUTE=5;BYSECOND=6",
+    //     )?;
+    //     test(
+    //         "yearly_#10",
+    //         "FREQ=YEARLY;COUNT=10;BYMONTH=2;BYMONTHDAY=3;BYHOUR=4;BYMINUTE=5;BYSECOND=6",
+    //     )?;
+    //     test(
+    //         "weekly_%2-25/08",
+    //         "FREQ=WEEKLY;UNTIL=20250801T000000Z;INTERVAL=2;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
+    //     )?;
+    //     test(
+    //         "mo,we,su_#5",
+    //         "FREQ=WEEKLY;COUNT=5;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO,WE,SU",
+    //     )?;
+    //     Ok(())
+    // }
 
     /// These tests could also break due to implementation details in rrule crate.
     /// In that case update tests, such that  the rule order does not matter

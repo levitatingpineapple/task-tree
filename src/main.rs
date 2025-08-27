@@ -32,8 +32,15 @@ struct Backend {
 
 static CONTEXT: OnceCell<Context> = OnceCell::const_new();
 
+#[cfg(not(test))]
 pub fn context() -> &'static Context {
     CONTEXT.get().expect("initialised")
+}
+
+#[cfg(test)]
+pub fn context() -> &'static Context {
+    static TEST_CONTEXT: std::sync::OnceLock<Context> = std::sync::OnceLock::new();
+    TEST_CONTEXT.get_or_init(|| Context::dummy())
 }
 
 #[tower_lsp::async_trait]

@@ -55,3 +55,35 @@ impl Default for Paths {
         }
     }
 }
+
+#[cfg(test)]
+impl Context {
+    pub fn dummy() -> Self {
+        Context {
+            config: Config::dummy(),
+            workspace: PathBuf::from("/tmp/test_workspace"),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Config {
+    pub fn dummy() -> Self {
+        Config {
+            caldav: CalDAV::dummy(),
+            paths: Paths::default(),
+            timezone: chrono_tz::America::New_York,
+        }
+    }
+}
+
+#[cfg(test)]
+impl CalDAV {
+    pub fn dummy() -> Self {
+        CalDAV {
+            url: "https://example.com/caldav".to_string(),
+            user: "test_user".to_string(),
+            pass: "test_pass".to_string(),
+        }
+    }
+}
