@@ -16,6 +16,8 @@ use tower_lsp::lsp_types::InitializeParams;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+use crate::session::Session;
+
 const EXPORT_ICS: &str = "tasktree.export";
 const EXTRACT_COMPLETED: &str = "tasktree.cleanup";
 
@@ -69,6 +71,10 @@ impl LanguageServer for Backend {
             .expect("Init should be called only once");
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec!["`".to_string()]),
+                    ..Default::default()
+                }),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
@@ -148,5 +154,29 @@ impl LanguageServer for Backend {
         }
 
         Ok(None)
+    }
+
+    async fn completion(
+        &self,
+        params: CompletionParams,
+    ) -> jsonrpc::Result<Option<CompletionResponse>> {
+        Ok(
+            if let Some(context) = CONTEXT.get()
+                && let Some(cc) = params.context
+                && cc.trigger_kind == CompletionTriggerKind::TRIGGER_CHARACTER
+                && cc.trigger_character == Some("`".to_string())
+            {
+                Some(CompletionResponse::Array(
+                    (0..3)
+                        .map(|i| CompletionItem {
+                            label: Session::next_hour(context.config().timezone, i).to_string(),
+                            ..Default::default()
+                        })
+                        .collect(),
+                ))
+            } else {
+                None
+            },
+        )
     }
 }

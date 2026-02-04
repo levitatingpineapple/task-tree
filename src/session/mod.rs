@@ -1,7 +1,7 @@
 mod range;
 mod repeat;
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, TimeZone, Timelike, Utc};
 use ics::{
     parameters,
     properties::{DtEnd, DtStart},
@@ -17,6 +17,20 @@ pub struct Session {
 }
 
 impl Session {
+    pub fn next_hour(tz: chrono_tz::Tz, offset: i64) -> Session {
+        let now = chrono::Utc::now().with_timezone(&tz);
+        let start = (now + Duration::hours(offset + 1))
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap();
+        let end = start + Duration::hours(1);
+        Session {
+            range: Range::Timed(start..end),
+            repeat: None,
+        }
+    }
+
     pub fn dt_start<'a>(&self) -> DtStart<'a> {
         match &self.range {
             Range::AllDay(r) => {
