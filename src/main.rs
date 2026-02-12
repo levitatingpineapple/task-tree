@@ -89,6 +89,7 @@ impl LanguageServer for Backend {
                         .to_vec(),
                     work_done_progress_options: Default::default(),
                 }),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -101,17 +102,15 @@ impl LanguageServer for Backend {
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         if let Ok(file_path) = params.text_document.uri.to_file_path() {
-            if let Some(context) = CONTEXT.get() {
-                if file_path == context.todo() {
-                    if let Err(err) = export_ics(context).await {
-                        self.client
-                            .show_message(MessageType::ERROR, format!("🌳 {}", err))
-                            .await;
-                    } else {
-                        self.client
-                            .show_message(MessageType::INFO, format!("🌳 {}", "Calendar exported."))
-                            .await;
-                    }
+            if file_path == context().todo() {
+                if let Err(err) = export_ics(context()).await {
+                    self.client
+                        .show_message(MessageType::ERROR, format!("🌳 {}", err))
+                        .await;
+                } else {
+                    self.client
+                        .show_message(MessageType::INFO, format!("🌳 {}", "Calendar exported."))
+                        .await;
                 }
             }
         }
@@ -161,15 +160,14 @@ impl LanguageServer for Backend {
         params: CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
         Ok(
-            if let Some(context) = CONTEXT.get()
-                && let Some(cc) = params.context
+            if let Some(cc) = params.context
                 && cc.trigger_kind == CompletionTriggerKind::TRIGGER_CHARACTER
                 && cc.trigger_character == Some("`".to_string())
             {
                 Some(CompletionResponse::Array(
                     (0..3)
                         .map(|i| CompletionItem {
-                            label: Session::next_hour(context.config().timezone, i).to_string(),
+                            label: Session::next_hour(context().config().timezone, i).to_string(),
                             ..Default::default()
                         })
                         .collect(),
@@ -178,5 +176,12 @@ impl LanguageServer for Backend {
                 None
             },
         )
+    }
+
+    async fn code_action(
+        &self,
+        _params: CodeActionParams,
+    ) -> jsonrpc::Result<Option<CodeActionResponse>> {
+        Ok(None)
     }
 }

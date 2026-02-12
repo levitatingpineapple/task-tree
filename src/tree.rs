@@ -6,10 +6,6 @@
 /// - Group is group child
 /// - Group is task root
 /// - Task is task child
-///
-/// ```rust
-/// let a = 5;
-/// ```
 use std::hash::Hash;
 use std::slice::Iter;
 
