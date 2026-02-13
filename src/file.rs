@@ -130,8 +130,7 @@ pub enum FileErr {
     #[error("Tasks without group")]
     LooseTasks,
     #[error("Task error: {0}")]
-    Ts(#[from] TaskErr),
-
+    Task(#[from] TaskErr),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Invalid Markdown: {0}")]
