@@ -38,7 +38,7 @@ impl TaskTree {
                         sub_groups.push(Group::new(child.to_string()));
                     }
                     Node::List(list) => {
-                        let tasks = Task::new_tasks(list)?;
+                        let tasks = Task::new_tasks(list, None)?;
                         if heading_depth == 0 {
                             return Err(ranged(TaskTreeErr::LooseTasks, list.position.as_ref()));
                         } else {

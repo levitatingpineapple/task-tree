@@ -53,7 +53,7 @@ impl Task {
         // Populate child tasks
         if let Some(second_child) = child_iter.next() {
             if let Node::List(list) = second_child {
-                task.sub_tasks = Task::new_tasks(list)?
+                task.sub_tasks = Task::new_tasks(list, task.done)?
             } else {
                 return Err(ranged(TaskErr::NotList, second_child.position()));
             };
@@ -62,11 +62,20 @@ impl Task {
     }
 
     /// Given a markdown list - returns a vector or tasks
-    pub fn new_tasks(list: &List) -> Result<Vec<Task>, Ranged<TaskErr>> {
+    pub fn new_tasks(list: &List, parent_done: Option<bool>) -> Result<Vec<Task>, Ranged<TaskErr>> {
         list.children
             .iter()
             .map(|child| match child {
-                Node::ListItem(item) => Task::new(item),
+                Node::ListItem(list_item) => {
+                    if parent_done == Some(true) && list_item.checked != Some(true) {
+                        Err(ranged(
+                            TaskErr::ParentCompleted,
+                            list_item.position.as_ref(),
+                        ))
+                    } else {
+                        Task::new(list_item)
+                    }
+                }
                 _ => Err(ranged(TaskErr::NotListItem, child.position())),
             })
             .collect()
@@ -140,6 +149,8 @@ pub enum TaskErr {
     MissingParagraph,
     #[error("Second child should be a list")]
     NotList,
+    #[error("Incomplete task for completed parent")]
+    ParentCompleted,
     #[error("Session error: {0}")]
     Session(#[from] SessionErr),
 }
