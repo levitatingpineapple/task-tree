@@ -1,14 +1,16 @@
 mod commands;
 mod context;
-mod file;
 mod group;
+mod ranged;
 mod session;
 mod task;
+mod tasktree;
 mod tree;
 
 use commands::{export_ics, extract_completed};
 use context::{Config, Context};
 use std::fs;
+use std::str::FromStr;
 use tokio::io::{stdin, stdout};
 use tokio::sync::OnceCell;
 use tower_lsp::jsonrpc;
@@ -77,6 +79,9 @@ impl LanguageServer for Backend {
                 }),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
+                        // Required to trigger `did_change` callback
+                        change: Some(TextDocumentSyncKind::FULL),
+                        // Required to trigger `did_save` callback
                         save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
                             include_text: Some(false),
                         })),
@@ -98,6 +103,36 @@ impl LanguageServer for Backend {
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
         Ok(())
+    }
+
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        if let Some(last) = params.content_changes.last() {
+            let task_tree = crate::tasktree::TaskTree::from_str(&last.text);
+            match task_tree {
+                Ok(_) => {
+                    self.client
+                        .publish_diagnostics(params.text_document.uri, vec![], None)
+                        .await;
+                }
+                Err(ranged) => {
+                    if let Some(range) = ranged.range {
+                        let diagnostic = Diagnostic {
+                            range: range,
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            message: ranged.error.to_string(),
+                            ..Default::default()
+                        };
+                        self.client
+                            .publish_diagnostics(params.text_document.uri, vec![diagnostic], None)
+                            .await;
+                    } else {
+                        self.client
+                            .show_message(MessageType::ERROR, ranged.error)
+                            .await
+                    }
+                }
+            }
+        }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -160,9 +195,9 @@ impl LanguageServer for Backend {
         params: CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
         Ok(
-            if let Some(cc) = params.context
-                && cc.trigger_kind == CompletionTriggerKind::TRIGGER_CHARACTER
-                && cc.trigger_character == Some("`".to_string())
+            if let Some(ctx) = params.context
+                && ctx.trigger_kind == CompletionTriggerKind::TRIGGER_CHARACTER
+                && ctx.trigger_character == Some("`".to_string())
             {
                 Some(CompletionResponse::Array(
                     (0..3)
@@ -182,6 +217,7 @@ impl LanguageServer for Backend {
         &self,
         _params: CodeActionParams,
     ) -> jsonrpc::Result<Option<CodeActionResponse>> {
+        // TODO: Add code action to toggle the task
         Ok(None)
     }
 }

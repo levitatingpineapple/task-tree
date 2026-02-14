@@ -1,9 +1,10 @@
 use crate::{
     context::{CalDAV, Context},
-    file::File,
     group::Group,
+    ranged::Ranged,
     session,
     task::Task,
+    tasktree::{TaskTree, TaskTreeErr},
     tree::{Child, Parent},
 };
 use chrono::Utc;
@@ -11,12 +12,12 @@ use ics::{
     Event, ICalendar,
     properties::{LastModified, RRule, Summary},
 };
-use markdown::{ParseOptions, to_mdast};
 use reqwest;
 use std::{
     fmt::Debug,
     fs::read_to_string,
     hash::{DefaultHasher, Hash, Hasher},
+    str::FromStr,
 };
 
 async fn upload(
@@ -47,12 +48,11 @@ async fn upload(
 
 pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     let markdown = read_to_string(&context.todo())?;
-    let node = to_mdast(&markdown, &ParseOptions::gfm()).map_err(ExportErr::Markdown)?;
-    let file = File::new(node)?;
+    let file = TaskTree::from_str(&markdown)?;
     let now = Utc::now();
     let http_client = reqwest::Client::new();
     let datestamp = session::ics_format(&now);
-    for group_item in <File as Parent<Group>>::iter(&file) {
+    for group_item in <TaskTree as Parent<Group>>::iter(&file) {
         for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
             for (index, session) in task_item.child.sessions.iter().enumerate() {
                 // Construct unique event id using static hasher
@@ -89,8 +89,8 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
 pub fn extract_completed(context: &Context) -> Result<(), ExportErr> {
     let todo_path = context.todo();
     let done_path = context.done();
-    let mut todo = File::read_from(&todo_path)?;
-    let mut done = File::read_from(&done_path)?;
+    let mut todo = TaskTree::from_str(&read_to_string(&todo_path)?)?;
+    let mut done = TaskTree::from_str(&read_to_string(&done_path)?)?;
     todo.extract_completed_tasks(&mut |context| done.insert_task(context));
     todo.remove_empty_groups();
     done.remove_empty_groups();
@@ -106,12 +106,8 @@ pub fn extract_completed(context: &Context) -> Result<(), ExportErr> {
 pub enum ExportErr {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Invalid Markdown: {0}")]
-    Markdown(markdown::message::Message),
-    #[error("Task error: {0}")]
-    Task(#[from] crate::task::TaskErr),
-    #[error("Group error: {0}")]
-    File(#[from] crate::file::FileErr),
+    #[error("File error: {0}")]
+    TaskTree(#[from] Ranged<TaskTreeErr>),
     #[error("HTTP request error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("CalDAV error: {0}")]

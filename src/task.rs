@@ -1,4 +1,5 @@
 use crate::{
+    ranged::{Ranged, ranged},
     session::{Session, SessionErr},
     tree::{Child, Parent},
 };
@@ -19,13 +20,18 @@ pub struct Task {
 impl Task {
     /// Creates task from markdown list item
     /// Any code blocks expected to be decodable to a `Session`
-    pub fn new(list_item: &ListItem) -> Result<Task, TaskErr> {
+    fn new(list_item: &ListItem) -> Result<Task, Ranged<TaskErr>> {
         let mut child_iter = list_item.children.iter();
-        let first_child = child_iter.next().ok_or(TaskErr::EmptyListItem)?;
+        let first_child = child_iter
+            .next()
+            .ok_or(ranged(TaskErr::EmptyListItem, list_item.position.as_ref()))?;
         let paragraph = if let Node::Paragraph(paragraph) = first_child {
             Ok(paragraph)
         } else {
-            Err(TaskErr::MissingParagraph)
+            Err(ranged(
+                TaskErr::MissingParagraph,
+                list_item.position.as_ref(),
+            ))
         }?;
         let mut task = Task {
             done: list_item.checked,
@@ -34,8 +40,10 @@ impl Task {
         // Populate text and sessions
         for child in &paragraph.children {
             if let Node::InlineCode(inline_code) = child {
-                task.sessions
-                    .push(Session::from_str(&inline_code.value).map_err(TaskErr::Session)?);
+                task.sessions.push(
+                    Session::from_str(&inline_code.value)
+                        .map_err(|e| ranged(TaskErr::Session(e), inline_code.position.as_ref()))?,
+                );
             } else {
                 task.text.push_str(&child.to_string());
             }
@@ -47,19 +55,19 @@ impl Task {
             if let Node::List(list) = second_child {
                 task.sub_tasks = Task::new_tasks(list)?
             } else {
-                return Err(TaskErr::NotList);
+                return Err(ranged(TaskErr::NotList, second_child.position()));
             };
         }
         Ok(task)
     }
 
     /// Given a markdown list - returns a vector or tasks
-    pub fn new_tasks(list: &List) -> Result<Vec<Task>, TaskErr> {
+    pub fn new_tasks(list: &List) -> Result<Vec<Task>, Ranged<TaskErr>> {
         list.children
             .iter()
             .map(|child| match child {
                 Node::ListItem(item) => Task::new(item),
-                _ => Err(TaskErr::NotListItem),
+                _ => Err(ranged(TaskErr::NotListItem, child.position())),
             })
             .collect()
     }
@@ -133,7 +141,7 @@ pub enum TaskErr {
     #[error("Second child should be a list")]
     NotList,
     #[error("Session error: {0}")]
-    Session(SessionErr),
+    Session(#[from] SessionErr),
 }
 
 #[cfg(test)]

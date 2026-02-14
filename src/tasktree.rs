@@ -1,29 +1,30 @@
 use std::{
     fmt::{self, Display, Formatter},
-    fs::read_to_string,
-    path::Path,
+    str::FromStr,
 };
 
 use crate::{
     group::Group,
+    ranged::{Ranged, ranged},
     task::{Task, TaskErr},
     tree::{Child, Parent},
 };
-use markdown::{ParseOptions, mdast::Node, to_mdast};
+use markdown::{
+    ParseOptions,
+    mdast::Node,
+    message::{Message, Place},
+    to_mdast,
+    unist::Position,
+};
 
 #[derive(Debug, Default)]
-pub struct File {
-    pub sub_groups: Vec<Group>,
+pub struct TaskTree {
+    pub groups: Vec<Group>,
 }
 
-impl File {
-    pub fn read_from(path: &Path) -> Result<File, FileErr> {
-        let markdown = read_to_string(&path).unwrap();
-        File::new(to_mdast(&markdown, &ParseOptions::gfm()).map_err(|m| FileErr::Markdown(m))?)
-    }
-
-    pub fn new(node: Node) -> Result<File, FileErr> {
-        let mut file = File::default();
+impl TaskTree {
+    pub fn new(node: Node) -> Result<TaskTree, Ranged<TaskTreeErr>> {
+        let mut file = TaskTree::default();
         let mut heading_depth = 0;
 
         if let Some(children) = node.children() {
@@ -33,17 +34,17 @@ impl File {
                         heading_depth = heading.depth;
                         let sub_groups: &mut Vec<Group> = file
                             .last_children(heading_depth - 1)
-                            .ok_or(FileErr::HeadingOrder)?;
+                            .ok_or(ranged(TaskTreeErr::HeadingOrder, heading.position.as_ref()))?;
                         sub_groups.push(Group::new(child.to_string()));
                     }
                     Node::List(list) => {
                         let tasks = Task::new_tasks(list)?;
                         if heading_depth == 0 {
-                            return Err(FileErr::LooseTasks);
+                            return Err(ranged(TaskTreeErr::LooseTasks, list.position.as_ref()));
                         } else {
                             let last_group: &mut Group = file
                                 .last_children(heading_depth - 1)
-                                .ok_or(FileErr::HeadingOrder)?
+                                .ok_or(ranged(TaskTreeErr::HeadingOrder, list.position.as_ref()))?
                                 .last_mut() // Last child
                                 .expect(
                                     "Heading depth only incremented - when something is pushed",
@@ -86,10 +87,10 @@ impl File {
     }
 
     pub fn remove_empty_groups(&mut self) {
-        for sub_group in &mut self.sub_groups {
+        for sub_group in &mut self.groups {
             sub_group.remove_empty();
         }
-        self.sub_groups.retain(|g| g.is_empty());
+        self.groups.retain(|g| g.is_empty());
     }
 }
 
@@ -100,39 +101,72 @@ pub struct Context<'a> {
     pub task: Task,
 }
 
-impl Display for File {
+impl Display for TaskTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for group in &self.sub_groups {
+        for group in &self.groups {
             write!(f, "{}", group)?
         }
         Ok(())
     }
 }
 
-impl Parent<Group> for File {
+impl FromStr for TaskTree {
+    type Err = Ranged<TaskTreeErr>;
+
+    fn from_str(str: &str) -> Result<TaskTree, Ranged<TaskTreeErr>> {
+        TaskTree::new(to_mdast(&str, &ParseOptions::gfm())?)
+    }
+}
+
+impl Parent<Group> for TaskTree {
     fn children(&self) -> &Vec<Group> {
-        &self.sub_groups
+        &self.groups
     }
 
     fn children_mut(&mut self) -> &mut Vec<Group> {
-        &mut self.sub_groups
+        &mut self.groups
     }
 
     fn into_children(self) -> Vec<Group> {
-        self.sub_groups
+        self.groups
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum FileErr {
+pub enum TaskTreeErr {
     #[error("Heading parent missing")]
     HeadingOrder,
     #[error("Tasks without group")]
     LooseTasks,
     #[error("Task error: {0}")]
-    Task(#[from] TaskErr),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Task(TaskErr),
     #[error("Invalid Markdown: {0}")]
-    Markdown(markdown::message::Message),
+    Markdown(String),
+}
+
+impl From<Ranged<TaskErr>> for Ranged<TaskTreeErr> {
+    fn from(task_err: Ranged<TaskErr>) -> Ranged<TaskTreeErr> {
+        Ranged {
+            error: TaskTreeErr::Task(task_err.error),
+            range: task_err.range,
+        }
+    }
+}
+
+impl From<Message> for Ranged<TaskTreeErr> {
+    fn from(message: Message) -> Ranged<TaskTreeErr> {
+        ranged(
+            TaskTreeErr::Markdown(message.reason),
+            message
+                .place
+                .map(|place| match *place {
+                    Place::Position(position) => position,
+                    Place::Point(point) => Position {
+                        start: point.clone(),
+                        end: point,
+                    },
+                })
+                .as_ref(),
+        )
+    }
 }

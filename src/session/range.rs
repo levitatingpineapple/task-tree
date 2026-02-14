@@ -178,16 +178,17 @@ fn write(
 
 /// Parses date time with omitted default suffix
 fn date_time(str: &str) -> Result<DateTime<Tz>, RangeErr> {
-    let overlay = overlay(str, "XX/01/01_00:00:00", Align::Leading);
-    in_timezone(
-        &NaiveDateTime::parse_from_str(&overlay?, "%y/%m/%d_%H:%M:%S").map_err(RangeErr::Parse)?,
-    )
+    let overlay = overlay(str, "XX/01/01_00:00:00", Align::Leading)?;
+    in_timezone(&NaiveDateTime::parse_from_str(
+        &overlay,
+        "%y/%m/%d_%H:%M:%S",
+    )?)
 }
 
 /// Parses date with omitted default suffix
 fn date(str: &str) -> Result<NaiveDate, RangeErr> {
     let overlay = overlay(str, "XX/01/01", Align::Leading);
-    NaiveDate::parse_from_str(&overlay?, "%y/%m/%d").map_err(RangeErr::Parse)
+    Ok(NaiveDate::parse_from_str(&overlay?, "%y/%m/%d")?)
 }
 
 enum Align {
