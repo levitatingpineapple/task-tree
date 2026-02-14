@@ -106,6 +106,9 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        if !context().enabled(&params.text_document.uri) {
+            return;
+        };
         if let Some(last) = params.content_changes.last() {
             let task_tree = crate::tasktree::TaskTree::from_str(&last.text);
             match task_tree {
@@ -136,6 +139,9 @@ impl LanguageServer for Backend {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        if !context().enabled(&params.text_document.uri) {
+            return;
+        };
         if let Ok(file_path) = params.text_document.uri.to_file_path() {
             if file_path == context().todo() {
                 if let Err(err) = export_ics(context()).await {
@@ -155,38 +161,31 @@ impl LanguageServer for Backend {
         &self,
         params: ExecuteCommandParams,
     ) -> jsonrpc::Result<Option<serde_json::Value>> {
-        if let Some(context) = CONTEXT.get() {
-            match params.command.as_str() {
-                EXPORT_ICS => {
-                    if let Err(err) = export_ics(context).await {
-                        self.client
-                            .show_message(MessageType::ERROR, format!("🌳 {}", err))
-                            .await;
-                    } else {
-                        self.client
-                            .show_message(MessageType::INFO, format!("🌳 {}", "Calendar exported."))
-                            .await;
-                    }
+        match params.command.as_str() {
+            EXPORT_ICS => {
+                if let Err(err) = export_ics(context()).await {
+                    self.client
+                        .show_message(MessageType::ERROR, format!("🌳 {}", err))
+                        .await;
+                } else {
+                    self.client
+                        .show_message(MessageType::INFO, format!("🌳 {}", "Calendar exported."))
+                        .await;
                 }
-                EXTRACT_COMPLETED => {
-                    if let Err(err) = extract_completed(context) {
-                        self.client
-                            .show_message(MessageType::ERROR, format!("{}", err))
-                            .await;
-                    } else {
-                        self.client
-                            .show_message(MessageType::INFO, format!("🌳 {}", "Moved completed"))
-                            .await;
-                    }
-                }
-                _ => { /* ignore unknown commands */ }
             }
-        } else {
-            self.client
-                .show_message(MessageType::ERROR, "🔴 Missing opened file")
-                .await;
+            EXTRACT_COMPLETED => {
+                if let Err(err) = extract_completed(context()) {
+                    self.client
+                        .show_message(MessageType::ERROR, format!("{}", err))
+                        .await;
+                } else {
+                    self.client
+                        .show_message(MessageType::INFO, format!("🌳 {}", "Moved completed"))
+                        .await;
+                }
+            }
+            _ => { /* ignore unknown commands */ }
         }
-
         Ok(None)
     }
 
@@ -194,6 +193,9 @@ impl LanguageServer for Backend {
         &self,
         params: CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
+        if !context().enabled(&params.text_document_position.text_document.uri) {
+            return Ok(None);
+        };
         Ok(
             if let Some(ctx) = params.context
                 && ctx.trigger_kind == CompletionTriggerKind::TRIGGER_CHARACTER

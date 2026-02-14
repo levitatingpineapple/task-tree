@@ -24,6 +24,10 @@ impl Context {
     pub fn config(&self) -> &Config {
         &self.config
     }
+
+    pub fn enabled(&self, url: &reqwest::Url) -> bool {
+        [self.todo(), self.done()].contains(&url.to_file_path().expect("Local file"))
+    }
 }
 
 #[derive(Deserialize, Debug)]
