@@ -5,7 +5,7 @@ use crate::{
     session,
     task::Task,
     tasktree::{TaskTree, TaskTreeErr},
-    tree::{Child, Parent},
+    tree::Parent,
 };
 use chrono::Utc;
 use ics::{
@@ -48,23 +48,17 @@ async fn upload(
 
 pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     let markdown = read_to_string(&context.todo())?;
-    let file = TaskTree::from_str(&markdown)?;
+    let tasktree = TaskTree::from_str(&markdown)?;
     let now = Utc::now();
     let http_client = reqwest::Client::new();
     let datestamp = session::ics_format(&now);
-    for group_item in <TaskTree as Parent<Group>>::iter(&file) {
+    for group_item in <TaskTree as Parent<Group>>::iter(&tasktree) {
         for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
             for (index, session) in task_item.child.sessions.iter().enumerate() {
                 // Construct unique event id using static hasher
                 let mut hasher = DefaultHasher::new();
-                for parent in &group_item.parent_path {
-                    parent.hash(&mut hasher);
-                }
-                group_item.child.id().hash(&mut hasher);
-                for parent in &task_item.parent_path {
-                    parent.hash(&mut hasher);
-                }
-                task_item.child.id().hash(&mut hasher);
+                group_item.id_hash(&mut hasher);
+                task_item.id_hash(&mut hasher);
                 index.hash(&mut hasher);
                 let uid = format!("{:x}", hasher.finish());
                 // Populate and return the event

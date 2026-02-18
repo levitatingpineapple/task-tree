@@ -6,7 +6,7 @@
 /// - Group is group child
 /// - Group is task root
 /// - Task is task child
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::slice::Iter;
 
 /// Root of the tree structure parametrized by the type of children it contains
@@ -30,7 +30,7 @@ pub trait Parent<C: Child>: Sized {
     fn iter(&self) -> DepthFirstIterator<'_, C> {
         DepthFirstIterator {
             parent_path: vec![],
-            iterators: vec![self.children().iter()],
+            iterator_stack: vec![self.children().iter()],
         }
     }
 
@@ -124,27 +124,43 @@ pub struct IteratorItem<'a, C: Child> {
     pub parent_path: Vec<C::Id>,
 }
 
+impl<'a, C> IteratorItem<'a, C>
+where
+    C: Child,
+    C::Id: Hash,
+{
+    /// Hash which uniquely identifies a child in the tree
+    /// even if child's contents change
+    pub fn id_hash<H: Hasher>(&self, hasher: &mut H) {
+        for parent_id in self.parent_path.iter() {
+            parent_id.hash(hasher);
+        }
+        self.child.id().hash(hasher);
+    }
+}
+
 pub struct DepthFirstIterator<'a, C: Child> {
     parent_path: Vec<C::Id>,
-    iterators: Vec<Iter<'a, C>>,
+    iterator_stack: Vec<Iter<'a, C>>,
 }
 
 impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
     type Item = IteratorItem<'a, C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(iterator) = self.iterators.last_mut() {
+        if let Some(iterator) = self.iterator_stack.last_mut() {
             if let Some(child) = iterator.next() {
                 let item = IteratorItem {
                     child,
+                    // TODO: Is this clone really needed? Rc<[C::Id]> maybe?
                     parent_path: self.parent_path.clone(),
                 };
                 self.parent_path.push(child.id());
-                self.iterators.push(child.children().iter());
+                self.iterator_stack.push(child.children().iter());
                 Some(item)
             } else {
                 self.parent_path.pop();
-                self.iterators.pop();
+                self.iterator_stack.pop();
                 self.next() // Skip while backtracking
             }
         } else {

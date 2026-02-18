@@ -6,8 +6,9 @@ use std::{
 use crate::{
     group::Group,
     ranged::{Ranged, ranged},
+    session::Session,
     task::{Task, TaskErr},
-    tree::{Child, Parent},
+    tree::{Child, IteratorItem, Parent},
 };
 use markdown::{
     ParseOptions,
@@ -59,24 +60,26 @@ impl TaskTree {
         Ok(file)
     }
 
-    pub fn insert_task(&mut self, t: Context) {
-        self.insert(t.group_path, t.group)
+    pub fn insert_task(&mut self, t: MoveContext) {
+        self.insert(t.group_path, Group::new(t.group_id))
             .insert(t.task_path, t.task);
     }
 
+    /// Plucks completed tasks from the tree
+    /// and returns them in the `action` callback
     pub fn extract_completed_tasks<F>(&mut self, action: &mut F)
     where
-        F: FnMut(Context),
+        F: FnMut(MoveContext),
     {
         self.for_each_mut(&mut |group, group_path| {
             let group_id = group.id();
-            <Group as Parent<Task>>::extract_if(
+            Parent::<Task>::extract_if(
                 group,
                 &mut vec![],
                 &mut |task, task_path| {
-                    action(Context {
+                    action(MoveContext {
                         group_path,
-                        group: Group::new(group_id.clone()), // New shallow group
+                        group_id: group_id.clone(),
                         task_path,
                         task,
                     });
@@ -86,19 +89,26 @@ impl TaskTree {
         });
     }
 
+    /// Removes groups without any tasks or subgroups
     pub fn remove_empty_groups(&mut self) {
         for sub_group in &mut self.groups {
             sub_group.remove_empty();
         }
         self.groups.retain(|g| g.is_empty());
     }
-}
 
-pub struct Context<'a> {
-    pub group_path: &'a Vec<String>,
-    pub group: Group,
-    pub task_path: &'a Vec<String>,
-    pub task: Task,
+    pub fn _with_sessions<F>(&self, action: &mut F)
+    where
+        F: FnMut(&IteratorItem<Group>, &IteratorItem<Task>, &Session, usize),
+    {
+        for group_item in Parent::<Group>::iter(self) {
+            for task_item in Parent::<Task>::iter(group_item.child) {
+                for (index, session) in task_item.child.sessions.iter().enumerate() {
+                    action(&group_item, &task_item, &session, index);
+                }
+            }
+        }
+    }
 }
 
 impl Display for TaskTree {
@@ -130,6 +140,15 @@ impl Parent<Group> for TaskTree {
     fn into_children(self) -> Vec<Group> {
         self.groups
     }
+}
+
+/// Task with all of the relavant context
+/// for moving it to another tree
+pub struct MoveContext<'a> {
+    pub group_path: &'a Vec<String>,
+    pub group_id: String,
+    pub task_path: &'a Vec<String>,
+    pub task: Task,
 }
 
 #[derive(Debug, thiserror::Error)]
