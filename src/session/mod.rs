@@ -52,6 +52,30 @@ impl Session {
             Range::Timed(r) => DtEnd::new(ics_format(&r.end)),
         }
     }
+
+    // pub fn intersection(
+    //     &self,
+    //     range: std::ops::Range<DateTime<chrono_tz::Tz>>,
+    // ) -> Result<u64, range::RangeErr> {
+    //     let start = self.range.start().dt();
+    //     let end = self.range.end().dt();
+
+    //     if let Some(repeat) = &self.repeat {
+    //         // let foo = repeat.rule.clone();
+    //         let set = RRuleSet::new(rrule_tz(self.range.start().dt()))
+    //             .rrule(repeat.rule.clone())
+    //             .after(rrule_tz(start))
+    //             .before(rrule_tz(end));
+
+    //         for occurrence in &set {
+    //             println!("Occurrence in range: {}", occurrence);
+    //         }
+    //     }
+
+    //     // How can I find the start and end of a given day in some Tz???
+
+    //     todo!()
+    // }
 }
 
 impl FromStr for Session {

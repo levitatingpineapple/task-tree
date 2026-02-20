@@ -1,8 +1,8 @@
 use chrono::{
-    DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeZone, Timelike, Utc,
+    DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, ParseError, Timelike,
     offset::LocalResult,
 };
-use chrono_tz::Tz;
+use chrono_tz::{GapInfo, Tz};
 use std::{
     fmt::{self, Display, Formatter},
     ops::{self},
@@ -103,20 +103,28 @@ pub enum Bound {
 /// Time is interpreted and valid in system's local timezone
 /// String representation trims trailing suffix with default values
 impl Bound {
-    /// Returns time in UTC timezone
-    pub fn date_time(&self) -> DateTime<rrule::Tz> {
+    pub fn dt(self) -> DateTime<Tz> {
         match self {
-            Bound::AllDay(nd) => Utc
-                .from_utc_datetime(&nd.and_time(NaiveTime::default()))
-                .with_timezone(&rrule::Tz::UTC),
-            Bound::Timed(dt) => dt.with_timezone(&rrule::Tz::UTC),
+            Bound::AllDay(nd) => {
+                let tz = crate::context().config().timezone;
+                let ndt = nd.and_time(NaiveTime::default());
+                match ndt.and_local_timezone(tz) {
+                    LocalResult::Single(single) => single,
+                    LocalResult::Ambiguous(earliest, _) => earliest,
+                    LocalResult::None => GapInfo::new(&ndt, &tz)
+                        .expect("Midnight falls in gap")
+                        .end
+                        .expect("Timespans compiled for near future"),
+                }
+            }
+            Bound::Timed(dt) => dt,
         }
     }
 
     /// Returns time bound components as a vector.
     /// Used for trimming default suffix or common prefix
     /// in `Range`s `Display` implementation
-    pub fn components(&self) -> Vec<u32> {
+    fn components(&self) -> Vec<u32> {
         match &self {
             Bound::AllDay(nd) => vec![
                 nd.year().try_into().expect("B.C. not supported"),
@@ -214,8 +222,7 @@ fn overlay(over: &str, base: &str, align: Align) -> Result<String, RangeErr> {
 /// Interprets `NaiveDateTime` in configured timezone.
 /// Throws error if time is ambiguous or invalid due to winter/summer time switch
 pub fn in_timezone(ndt: &NaiveDateTime) -> Result<DateTime<Tz>, RangeErr> {
-    let tz = crate::context().config().timezone;
-    match ndt.and_local_timezone(tz) {
+    match ndt.and_local_timezone(crate::context().config().timezone) {
         LocalResult::Single(single) => Ok(single),
         LocalResult::Ambiguous(_, _) => Err(RangeErr::AmbiguousInTimezone),
         LocalResult::None => Err(RangeErr::InvalidInTimezone),
@@ -242,15 +249,10 @@ pub enum RangeErr {
 mod tests {
     use super::*;
     use chrono::{NaiveDate, NaiveTime};
-    use serial_test::serial;
 
     #[test]
     #[rustfmt::skip]
-    #[serial] // All timezone tests should be serial
     fn range_display() {
-        unsafe {
-            std::env::set_var("TZ", "UTC");
-        }
         test(
             "25/08-09",
             Range::AllDay(d(2025, 8, 1)..d(2025, 9, 1))
@@ -289,19 +291,23 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn range_error() {
-        unsafe {
-            std::env::set_var("TZ", "America/New_York");
-        }
         test("25/07/08", RangeErr::MissingEndBound);
         test("25/07/08-07", RangeErr::Empty);
-        test("25/03/09_02:30-40", RangeErr::InvalidInTimezone);
-        test("25/11/02_01:30-40", RangeErr::AmbiguousInTimezone);
+        test("25/09/07_00:30-40", RangeErr::InvalidInTimezone);
+        test("25/04/05_23:30-40", RangeErr::AmbiguousInTimezone);
 
         fn test(str: &str, err: RangeErr) {
             assert_eq!(Range::from_str(str), Err(err));
         }
+    }
+
+    #[test]
+    fn all_day_range() {
+        let range = Range::from_str("25/09/07-08").unwrap();
+        let dt = range.start().dt();
+        // This day starts at 01:00
+        assert_eq!(dt.time().hour(), 1);
     }
 
     #[test]

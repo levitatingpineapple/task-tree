@@ -43,10 +43,10 @@ impl Repeat {
         }
         // Decode until
         if let Some(until_str) = parts.next() {
-            rule = rule.until(Bound::from_str(until_str)?.date_time());
+            rule = rule.until(rrule_tz(Bound::from_str(until_str)?.dt()));
         }
         Ok(Repeat {
-            rule: rule.validate(range.start().date_time())?,
+            rule: rule.validate(rrule_tz(range.start().dt()))?,
         })
     }
 }
@@ -109,6 +109,10 @@ fn from_str(str: &str) -> Option<Weekday> {
     }
 }
 
+pub fn rrule_tz(dt: DateTime<Tz>) -> DateTime<rrule::Tz> {
+    dt.with_timezone(&dt.timezone().into())
+}
+
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum RepeatErr {
     #[error("Invalid frequency")]
@@ -120,58 +124,3 @@ pub enum RepeatErr {
     #[error("Range error")]
     Until(#[from] RangeErr),
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-//     use serial_test::serial;
-
-//     #[test]
-//     #[serial] // All timezone tests should be serial
-//     fn repeat_parsing() -> Result<(), RepeatErr> {
-//         unsafe {
-//             std::env::set_var("TZ", "UTC");
-//         }
-//         test("daily", "FREQ=DAILY;BYHOUR=4;BYMINUTE=5;BYSECOND=6")?;
-//         test(
-//             "weekly",
-//             "FREQ=WEEKLY;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
-//         )?;
-//         test(
-//             "monthly_%2",
-//             "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=3;BYHOUR=4;BYMINUTE=5;BYSECOND=6",
-//         )?;
-//         test(
-//             "yearly_#10",
-//             "FREQ=YEARLY;COUNT=10;BYMONTH=2;BYMONTHDAY=3;BYHOUR=4;BYMINUTE=5;BYSECOND=6",
-//         )?;
-//         test(
-//             "weekly_%2-25/08",
-//             "FREQ=WEEKLY;UNTIL=20250801T000000Z;INTERVAL=2;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO",
-//         )?;
-//         test(
-//             "mo,we,su_#5",
-//             "FREQ=WEEKLY;COUNT=5;BYHOUR=4;BYMINUTE=5;BYSECOND=6;BYDAY=MO,WE,SU",
-//         )?;
-//         Ok(())
-//     }
-
-//     /// These tests could also break due to implementation details in rrule crate.
-//     /// In that case update tests, such that  the rule order does not matter
-//     fn test(str: &str, rrule_str: &str) -> Result<(), RepeatErr> {
-//         let repeat = Repeat::from_str_in_range(
-//             str,
-//             &Range::Timed(dt(25, 02, 03, 04, 05, 06)..dt(25, 02, 03, 07, 08, 09)),
-//         )?;
-//         assert_eq!(repeat.to_string(), str);
-//         assert_eq!(repeat.rule.to_string(), rrule_str);
-//         Ok(())
-//     }
-
-//     fn dt(y: i32, m: u32, d: u32, h: u32, min: u32, s: u32) -> DateTime<Tz> {
-//         let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
-//         let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
-//         crate::session::range::in_timezone(&NaiveDateTime::new(date, time)).unwrap()
-//     }
-// }

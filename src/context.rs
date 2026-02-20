@@ -76,7 +76,7 @@ impl Config {
         Config {
             caldav: CalDAV::dummy(),
             paths: Paths::default(),
-            timezone: chrono_tz::America::New_York,
+            timezone: chrono_tz::America::Santiago,
         }
     }
 }
