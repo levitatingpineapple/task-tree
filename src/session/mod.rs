@@ -1,14 +1,18 @@
+#[allow(dead_code)]
 mod range;
 mod repeat;
 
-use chrono::{DateTime, Duration, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Duration, TimeDelta, TimeZone, Timelike, Utc};
+use chrono_tz::Tz;
 use ics::{
     parameters,
     properties::{DtEnd, DtStart},
 };
 use range::{Range, RangeErr};
 use repeat::{Repeat, RepeatErr};
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, ops::Add, str::FromStr};
+
+use crate::session::repeat::rrule_tz;
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
@@ -17,13 +21,13 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn next_hour(tz: chrono_tz::Tz, offset: i64) -> Session {
+    pub fn next_hour(tz: Tz, offset: i64) -> Session {
         let now = chrono::Utc::now().with_timezone(&tz);
         let start = (now + Duration::hours(offset + 1))
             .with_minute(0)
-            .unwrap()
+            .expect("valid minute")
             .with_second(0)
-            .unwrap();
+            .expect("valid second");
         let end = start + Duration::hours(1);
         Session {
             range: Range::Timed(start..end),
@@ -53,29 +57,30 @@ impl Session {
         }
     }
 
-    // pub fn intersection(
-    //     &self,
-    //     range: std::ops::Range<DateTime<chrono_tz::Tz>>,
-    // ) -> Result<u64, range::RangeErr> {
-    //     let start = self.range.start().dt();
-    //     let end = self.range.end().dt();
-
-    //     if let Some(repeat) = &self.repeat {
-    //         // let foo = repeat.rule.clone();
-    //         let set = RRuleSet::new(rrule_tz(self.range.start().dt()))
-    //             .rrule(repeat.rule.clone())
-    //             .after(rrule_tz(start))
-    //             .before(rrule_tz(end));
-
-    //         for occurrence in &set {
-    //             println!("Occurrence in range: {}", occurrence);
-    //         }
-    //     }
-
-    //     // How can I find the start and end of a given day in some Tz???
-
-    //     todo!()
-    // }
+    /// Calculates total time a session is active in some time range
+    pub fn time_delta(&self, range: Range) -> TimeDelta {
+        let time_delta = self.range.time_delta();
+        let repeats = if let Some(repeat) = &self.repeat {
+            // It should be fine to call unchecked, since bounds are added
+            // set includes the initial session
+            rrule::RRuleSet::new(rrule_tz(self.range.start().dt()))
+                .rrule(repeat.rule.clone())
+                .after(rrule_tz(range.start().dt() - time_delta))
+                .before(rrule_tz(range.end().dt()))
+                // NOTE: `rrule` lib will skip repeats, which can't be resolved in a given timezone
+                .all_unchecked()
+        } else {
+            vec![rrule_tz(self.range.start().dt())]
+        };
+        repeats
+            .into_iter()
+            .map(|repeat| {
+                let start = rrule_tz(self.range.start().dt()).max(repeat);
+                let end = rrule_tz(self.range.end().dt()).max(repeat + time_delta);
+                (end - start).min(TimeDelta::zero())
+            })
+            .fold(TimeDelta::zero(), TimeDelta::add)
+    }
 }
 
 impl FromStr for Session {
@@ -127,6 +132,36 @@ mod tests {
         let str = "25/08/22-25|monthly";
         let session = Session::from_str(str)?;
         assert_eq!(str, session.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn time_delta() -> Result<(), SessionErr> {
+        // Session in range
+        test("25/10/10_13-14", "25/10/10-11", TimeDelta::hours(1))?;
+        // Range in session
+        test("25/10/10-11", "25/10/10_13-14", TimeDelta::hours(1))?;
+        // Session during range start
+        test("25/10/10-11", "25/10/09_22-10_01", TimeDelta::hours(1))?;
+        // Session during range end
+        test("25/10/10-11", "25/10/10_23-11_02", TimeDelta::hours(1))?;
+        // Repeated session
+        test("25/10/10_14-15|daily", "25/11/10-14", TimeDelta::hours(3))?;
+        // Repeated session on renge boundary
+        test(
+            "25/10/10_23:15-11_00:15|daily",
+            "25/11/10-14",
+            TimeDelta::hours(3),
+        )?;
+
+        fn test(session: &str, range: &str, time_delta: TimeDelta) -> Result<(), SessionErr> {
+            assert_eq!(
+                Session::from_str(session)?.time_delta(Range::from_str(range)?),
+                time_delta
+            );
+            Ok(())
+        }
+
         Ok(())
     }
 }

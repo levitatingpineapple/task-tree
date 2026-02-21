@@ -1,5 +1,5 @@
 use chrono::{
-    DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, ParseError, Timelike,
+    DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeDelta, Timelike,
     offset::LocalResult,
 };
 use chrono_tz::{GapInfo, Tz};
@@ -28,6 +28,10 @@ impl Range {
             Range::AllDay(range) => Bound::AllDay(range.end),
             Range::Timed(range) => Bound::Timed(range.end),
         }
+    }
+
+    pub fn time_delta(&self) -> TimeDelta {
+        self.end().dt() - self.start().dt()
     }
 }
 
@@ -112,9 +116,10 @@ impl Bound {
                     LocalResult::Single(single) => single,
                     LocalResult::Ambiguous(earliest, _) => earliest,
                     LocalResult::None => GapInfo::new(&ndt, &tz)
+                        // True, since we are in `LocalResult::None` case
                         .expect("Midnight falls in gap")
                         .end
-                        .expect("Timespans compiled for near future"),
+                        .expect("Timespans compiled for near future (up to year 2100)"),
                 }
             }
             Bound::Timed(dt) => dt,
@@ -303,11 +308,14 @@ mod tests {
     }
 
     #[test]
-    fn all_day_range() {
-        let range = Range::from_str("25/09/07-08").unwrap();
+    fn all_day_range() -> Result<(), RangeErr> {
+        let range = Range::from_str("25/09/07-08")?;
         let dt = range.start().dt();
         // This day starts at 01:00
         assert_eq!(dt.time().hour(), 1);
+        // And has 23 hours
+        assert_eq!(range.time_delta(), TimeDelta::hours(23));
+        Ok(())
     }
 
     #[test]

@@ -45,6 +45,7 @@ impl Repeat {
         if let Some(until_str) = parts.next() {
             rule = rule.until(rrule_tz(Bound::from_str(until_str)?.dt()));
         }
+        // TODO: Also validate that repeat interval is larger than `range.time_delta` which the library does not do...
         Ok(Repeat {
             rule: rule.validate(rrule_tz(range.start().dt()))?,
         })
