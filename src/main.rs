@@ -1,7 +1,8 @@
+mod chart;
 mod commands;
 mod context;
 mod group;
-mod ranged;
+mod ranged_err;
 mod session;
 mod task;
 mod tasktree;

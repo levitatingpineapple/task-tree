@@ -5,14 +5,14 @@ use chrono::{
 use chrono_tz::{GapInfo, Tz};
 use std::{
     fmt::{self, Display, Formatter},
-    ops::{self},
+    ops::RangeInclusive,
     str::FromStr,
 };
 
 #[derive(Debug, PartialEq)]
 pub enum Range {
-    AllDay(ops::Range<NaiveDate>),
-    Timed(ops::Range<DateTime<Tz>>),
+    AllDay(Span<NaiveDate>),
+    Timed(Span<DateTime<Tz>>),
 }
 
 impl Range {
@@ -48,18 +48,18 @@ impl FromStr for Range {
         )?;
         Ok(match Bound::from_str(start)? {
             Bound::AllDay(nd) => {
-                let range = nd..date(end)?;
-                if range.is_empty() {
+                let span = Span::new(nd, date(end)?);
+                if span.is_empty() {
                     return Err(RangeErr::Empty);
                 }
-                Range::AllDay(range)
+                Range::AllDay(span)
             }
             Bound::Timed(dt) => {
-                let range = dt..date_time(end)?;
-                if range.is_empty() {
+                let span = Span::new(dt, date_time(end)?);
+                if span.is_empty() {
                     return Err(RangeErr::Empty);
                 }
-                Range::Timed(range)
+                Range::Timed(span)
             }
         })
     }
@@ -97,6 +97,22 @@ impl Display for Range {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Span<T: PartialEq + Ord + Copy> {
+    pub start: T,
+    pub end: T,
+}
+
+impl<T: Ord + Copy> Span<T> {
+    pub fn new(start: T, end: T) -> Span<T> {
+        Span { start, end }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.start >= self.end
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Bound {
     AllDay(NaiveDate),
@@ -104,24 +120,12 @@ pub enum Bound {
 }
 
 /// Represents start or end bound of the time `Range`
-/// Time is interpreted and valid in system's local timezone
+/// Time is interpreted and valid in a given timezone
 /// String representation trims trailing suffix with default values
 impl Bound {
     pub fn dt(self) -> DateTime<Tz> {
         match self {
-            Bound::AllDay(nd) => {
-                let tz = crate::context().config().timezone;
-                let ndt = nd.and_time(NaiveTime::default());
-                match ndt.and_local_timezone(tz) {
-                    LocalResult::Single(single) => single,
-                    LocalResult::Ambiguous(earliest, _) => earliest,
-                    LocalResult::None => GapInfo::new(&ndt, &tz)
-                        // True, since we are in `LocalResult::None` case
-                        .expect("Midnight falls in gap")
-                        .end
-                        .expect("Timespans compiled for near future (up to year 2100)"),
-                }
-            }
+            Bound::AllDay(nd) => first_time(&nd),
             Bound::Timed(dt) => dt,
         }
     }
@@ -165,11 +169,7 @@ impl FromStr for Bound {
 /// implement in a type-safe way.
 /// Expects 3 (AllDay) or 6 (Timed) components and range
 /// within the bounds of the `components`
-fn write(
-    f: &mut Formatter<'_>,
-    components: Vec<u32>,
-    range: ops::RangeInclusive<usize>,
-) -> fmt::Result {
+fn write(f: &mut Formatter<'_>, components: Vec<u32>, range: RangeInclusive<usize>) -> fmt::Result {
     // Sanity check
     debug_assert!([3usize, 6usize].contains(&components.len()));
     debug_assert!(range.start() <= &components.len() && range.end() <= &components.len());
@@ -234,6 +234,22 @@ pub fn in_timezone(ndt: &NaiveDateTime) -> Result<DateTime<Tz>, RangeErr> {
     }
 }
 
+// Calculates first time for a given date.
+// Will return the next day, in case date does not exist.
+pub fn first_time(nd: &NaiveDate) -> DateTime<Tz> {
+    let tz = crate::context().config().timezone;
+    let ndt = nd.and_time(NaiveTime::default());
+    match ndt.and_local_timezone(tz) {
+        LocalResult::Single(single) => single,
+        LocalResult::Ambiguous(earliest, _) => earliest,
+        LocalResult::None => GapInfo::new(&ndt, &tz)
+            // True, since we are in `LocalResult::None` case
+            .expect("Midnight falls in gap")
+            .end
+            .expect("Timespans compiled for near future (up to year 2100)"),
+    }
+}
+
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum RangeErr {
     #[error("Missing end date/time")]
@@ -260,23 +276,23 @@ mod tests {
     fn range_display() {
         test(
             "25/08-09",
-            Range::AllDay(d(2025, 8, 1)..d(2025, 9, 1))
+            Range::AllDay(Span::new(d(2025, 8, 1), d(2025, 9, 1)))
         );
         test(
             "25/01/28-30",
-            Range::AllDay(d(2025, 1, 28)..d(2025, 1, 30))
+            Range::AllDay(Span::new(d(2025, 1, 28), d(2025, 1, 30)))
         );
         test(
             "25-28",
-            Range::AllDay(d(2025, 1, 1)..d(2028, 1, 1))
+            Range::AllDay(Span::new(d(2025, 1, 1), d(2028, 1, 1)))
         );
         test(
             "25/08/01_17-18",
-            Range::Timed(dt(2025, 8, 1, 17, 0, 0)..dt(2025, 8, 1, 18, 0, 0))
+            Range::Timed(Span::new(dt(2025, 8, 1, 17, 0, 0), dt(2025, 8, 1, 18, 0, 0)))
         );
         test(
             "25/03/02_15:45-04/01_11:46",
-            Range::Timed(dt(2025, 3, 2, 15, 45, 00)..dt(2025, 4, 1, 11, 46, 00))
+            Range::Timed(Span::new(dt(2025, 3, 2, 15, 45, 00), dt(2025, 4, 1, 11, 46, 00)))
         );
 
         fn test(str: &str, range: Range) {

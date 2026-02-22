@@ -12,7 +12,9 @@ use range::{Range, RangeErr};
 use repeat::{Repeat, RepeatErr};
 use std::{fmt::Display, ops::Add, str::FromStr};
 
-use crate::session::repeat::rrule_tz;
+use crate::{session::repeat::rrule_tz, tasktree::TotalTime};
+
+pub use range::{Span, first_time};
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
@@ -30,7 +32,7 @@ impl Session {
             .expect("valid second");
         let end = start + Duration::hours(1);
         Session {
-            range: Range::Timed(start..end),
+            range: Range::Timed(Span::new(start, end)),
             repeat: None,
         }
     }
@@ -56,17 +58,19 @@ impl Session {
             Range::Timed(r) => DtEnd::new(ics_format(&r.end)),
         }
     }
+}
 
+impl TotalTime for Session {
     /// Calculates total time a session is active in some time range
-    pub fn time_delta(&self, range: Range) -> TimeDelta {
+    fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta {
         let time_delta = self.range.time_delta();
         let repeats = if let Some(repeat) = &self.repeat {
             // It should be fine to call unchecked, since bounds are added
             // set includes the initial session
             rrule::RRuleSet::new(rrule_tz(self.range.start().dt()))
                 .rrule(repeat.rule.clone())
-                .after(rrule_tz(range.start().dt() - time_delta))
-                .before(rrule_tz(range.end().dt()))
+                .after(rrule_tz(span.start - time_delta))
+                .before(rrule_tz(span.end))
                 // NOTE: `rrule` lib will skip repeats, which can't be resolved in a given timezone
                 .all_unchecked()
         } else {
@@ -77,7 +81,7 @@ impl Session {
             .map(|repeat| {
                 let start = rrule_tz(self.range.start().dt()).max(repeat);
                 let end = rrule_tz(self.range.end().dt()).max(repeat + time_delta);
-                (end - start).min(TimeDelta::zero())
+                (end - start).max(TimeDelta::zero())
             })
             .fold(TimeDelta::zero(), TimeDelta::add)
     }
@@ -155,10 +159,10 @@ mod tests {
         )?;
 
         fn test(session: &str, range: &str, time_delta: TimeDelta) -> Result<(), SessionErr> {
-            assert_eq!(
-                Session::from_str(session)?.time_delta(Range::from_str(range)?),
-                time_delta
-            );
+            let range = Range::from_str(range)?;
+            let span = Span::new(range.start().dt(), range.end().dt());
+            println!("{:?}", span);
+            assert_eq!(Session::from_str(session)?.time_delta(span), time_delta);
             Ok(())
         }
 

@@ -1,8 +1,11 @@
 use crate::{
-    ranged::{Ranged, ranged},
-    session::{Session, SessionErr},
+    ranged_err::{Ranged, ranged},
+    session::{Session, SessionErr, Span},
+    tasktree::TotalTime,
     tree::{Child, Parent},
 };
+use chrono::{DateTime, TimeDelta};
+use chrono_tz::Tz;
 use markdown::mdast::{List, ListItem, Node};
 use std::{
     fmt::{self, Display, Formatter},
@@ -96,6 +99,21 @@ impl Task {
             child.fmt_recursive(f, level + 1)?;
         }
         Ok(())
+    }
+}
+
+impl TotalTime for Task {
+    fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta {
+        let sub_tasks = Parent::<Task>::iter(self).fold(TimeDelta::zero(), |time, task_item| {
+            time + task_item.child.time_delta(span)
+        });
+        let sessions = self
+            .sessions
+            .iter()
+            .fold(TimeDelta::zero(), |time, session| {
+                time + session.time_delta(span)
+            });
+        sessions + sub_tasks
     }
 }
 

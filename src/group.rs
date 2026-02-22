@@ -1,7 +1,12 @@
 use std::fmt::{self, Display, Formatter};
 
+use chrono::{DateTime, TimeDelta};
+use chrono_tz::Tz;
+
 use crate::{
+    session::Span,
     task::Task,
+    tasktree::TotalTime,
     tree::{Child, Parent},
 };
 
@@ -88,5 +93,18 @@ impl Parent<Task> for Group {
 
     fn into_children(self) -> Vec<Task> {
         self.tasks
+    }
+}
+
+impl TotalTime for Group {
+    fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta {
+        let sub_groups = Parent::<Group>::iter(self).fold(TimeDelta::zero(), |time, group_item| {
+            time + group_item.child.time_delta(span)
+        });
+        let tasks = self
+            .tasks
+            .iter()
+            .fold(TimeDelta::zero(), |time, task| time + task.time_delta(span));
+        tasks + sub_groups
     }
 }

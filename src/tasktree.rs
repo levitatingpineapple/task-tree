@@ -5,11 +5,13 @@ use std::{
 
 use crate::{
     group::Group,
-    ranged::{Ranged, ranged},
-    session::Session,
+    ranged_err::{Ranged, ranged},
+    session::{Session, Span},
     task::{Task, TaskErr},
     tree::{Child, IteratorItem, Parent},
 };
+use chrono::{DateTime, TimeDelta};
+use chrono_tz::Tz;
 use markdown::{
     ParseOptions,
     mdast::Node,
@@ -109,6 +111,11 @@ impl TaskTree {
             }
         }
     }
+}
+
+/// A type, which occupies an amount of time in a given time range
+pub trait TotalTime {
+    fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta;
 }
 
 impl Display for TaskTree {
