@@ -227,7 +227,7 @@ fn overlay(over: &str, base: &str, align: Align) -> Result<String, RangeErr> {
 /// Interprets `NaiveDateTime` in configured timezone.
 /// Throws error if time is ambiguous or invalid due to winter/summer time switch
 pub fn in_timezone(ndt: &NaiveDateTime) -> Result<DateTime<Tz>, RangeErr> {
-    match ndt.and_local_timezone(crate::context().config().timezone) {
+    match ndt.and_local_timezone(crate::context::get().config().timezone) {
         LocalResult::Single(single) => Ok(single),
         LocalResult::Ambiguous(_, _) => Err(RangeErr::AmbiguousInTimezone),
         LocalResult::None => Err(RangeErr::InvalidInTimezone),
@@ -237,7 +237,7 @@ pub fn in_timezone(ndt: &NaiveDateTime) -> Result<DateTime<Tz>, RangeErr> {
 // Calculates first time for a given date.
 // Will return the next day, in case date does not exist.
 pub fn first_time(nd: &NaiveDate) -> DateTime<Tz> {
-    let tz = crate::context().config().timezone;
+    let tz = crate::context::get().config().timezone;
     let ndt = nd.and_time(NaiveTime::default());
     match ndt.and_local_timezone(tz) {
         LocalResult::Single(single) => single,

@@ -79,7 +79,7 @@ impl Display for Repeat {
             write!(f, "_#{}", count)?;
         }
         if let Some(until) = self.rule.get_until() {
-            let tz = crate::context().config().timezone;
+            let tz = crate::context::get().config().timezone;
             let dt = until.with_timezone(&tz);
             write!(f, "-{}", dt.format(until_format(&dt)).to_string())?;
         }

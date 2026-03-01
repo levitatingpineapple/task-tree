@@ -1,6 +1,38 @@
 use chrono_tz::Tz;
 use serde::Deserialize;
 use std::path::PathBuf;
+use tokio::sync::OnceCell;
+
+static CONTEXT: OnceCell<Context> = OnceCell::const_new();
+
+pub fn set(context: Context) {
+    CONTEXT.set(context).expect("Context is only set once");
+}
+
+#[cfg(not(test))]
+pub fn get() -> &'static Context {
+    CONTEXT.get().expect("Context has been initialised")
+}
+
+#[cfg(test)]
+pub fn get() -> &'static Context {
+    static TEST_CONTEXT: std::sync::OnceLock<Context> = std::sync::OnceLock::new();
+    TEST_CONTEXT.get_or_init(|| Context::dummy())
+}
+
+// pub fn init_context(workspace: PathBuf) -> jsonrpc::Result<()> {
+//     let config: Config = fs::read_to_string(&workspace.join(".task-tree.toml"))
+//         .map_err(|_| jsonrpc::Error::invalid_params("Failed to find .task-tree.toml file"))
+//         .and_then(|content| {
+//             toml::from_str(&content).map_err(|e| {
+//                 jsonrpc::Error::invalid_params(format!("Failed to parse .task-tree.toml: {}", e))
+//             })
+//         })?;
+//     CONTEXT
+//         .set(Context::new(config, workspace))
+//         .expect("Init should be called only once");
+//     Ok(())
+// }
 
 #[derive(Debug)]
 pub struct Context {

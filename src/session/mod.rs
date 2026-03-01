@@ -79,8 +79,8 @@ impl TotalTime for Session {
         repeats
             .into_iter()
             .map(|repeat| {
-                let start = rrule_tz(self.range.start().dt()).max(repeat);
-                let end = rrule_tz(self.range.end().dt()).max(repeat + time_delta);
+                let start = rrule_tz(span.start).max(repeat);
+                let end = rrule_tz(span.end).min(repeat + time_delta);
                 (end - start).max(TimeDelta::zero())
             })
             .fold(TimeDelta::zero(), TimeDelta::add)
@@ -150,12 +150,12 @@ mod tests {
         // Session during range end
         test("25/10/10-11", "25/10/10_23-11_02", TimeDelta::hours(1))?;
         // Repeated session
-        test("25/10/10_14-15|daily", "25/11/10-14", TimeDelta::hours(3))?;
-        // Repeated session on renge boundary
+        test("25/10/10_14-15|daily", "25/11/10-14", TimeDelta::hours(4))?;
+        // Repeated session on range boundary
         test(
             "25/10/10_23:15-11_00:15|daily",
             "25/11/10-14",
-            TimeDelta::hours(3),
+            TimeDelta::hours(4),
         )?;
 
         fn test(session: &str, range: &str, time_delta: TimeDelta) -> Result<(), SessionErr> {
