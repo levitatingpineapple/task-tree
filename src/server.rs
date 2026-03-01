@@ -1,9 +1,9 @@
 use crate::{
     commands::{export_ics, extract_completed},
-    context::{self, Config, Context},
+    context::{self},
     session::Session,
 };
-use std::{fs, str::FromStr};
+use std::str::FromStr;
 use tower_lsp::{Client, LanguageServer, jsonrpc, lsp_types::*};
 
 const EXPORT_ICS: &str = "tasktree.export";
@@ -23,16 +23,6 @@ impl TaskTreeServer {
 #[tower_lsp::async_trait]
 impl LanguageServer for TaskTreeServer {
     async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
-        // Find provided workspace root
-        //
-        //
-        {
-            let foo = params.workspace_folders.clone().unwrap();
-
-            self.client
-                .show_message(MessageType::ERROR, format!("{:?}", foo))
-                .await;
-        }
         let workspace = params
             .workspace_folders
             .as_ref()
@@ -40,17 +30,7 @@ impl LanguageServer for TaskTreeServer {
             .and_then(|folder| folder.uri.to_file_path().ok())
             .ok_or_else(|| jsonrpc::Error::invalid_params("No workspace folder found"))?;
         // Find and load .task-tree.toml config file
-        let config: Config = fs::read_to_string(&workspace.join(".task-tree.toml"))
-            .map_err(|_| jsonrpc::Error::invalid_params("Failed to find .task-tree.toml file"))
-            .and_then(|content| {
-                toml::from_str(&content).map_err(|e| {
-                    jsonrpc::Error::invalid_params(format!(
-                        "Failed to parse .task-tree.toml: {}",
-                        e
-                    ))
-                })
-            })?;
-        context::set(Context::new(config, workspace));
+        context::set(&workspace).map_err(|e| jsonrpc::Error::invalid_params(e.to_string()))?;
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 completion_provider: Some(CompletionOptions {

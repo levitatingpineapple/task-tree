@@ -1,12 +1,27 @@
 use chrono_tz::Tz;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::{fs::read_to_string, path::PathBuf};
 use tokio::sync::OnceCell;
 
 static CONTEXT: OnceCell<Context> = OnceCell::const_new();
 
-pub fn set(context: Context) {
-    CONTEXT.set(context).expect("Context is only set once");
+pub fn set(workspace: &PathBuf) -> Result<(), ContextErr> {
+    let string = read_to_string(workspace.join(".task-tree.toml"))?;
+    CONTEXT
+        .set(Context {
+            config: toml::from_str(&string)?,
+            workspace: workspace.clone(),
+        })
+        .expect("Context is only set once");
+    Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ContextErr {
+    #[error("Io: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Config decode: {0}")]
+    Toml(#[from] toml::de::Error),
 }
 
 #[cfg(not(test))]
@@ -20,20 +35,6 @@ pub fn get() -> &'static Context {
     TEST_CONTEXT.get_or_init(|| Context::dummy())
 }
 
-// pub fn init_context(workspace: PathBuf) -> jsonrpc::Result<()> {
-//     let config: Config = fs::read_to_string(&workspace.join(".task-tree.toml"))
-//         .map_err(|_| jsonrpc::Error::invalid_params("Failed to find .task-tree.toml file"))
-//         .and_then(|content| {
-//             toml::from_str(&content).map_err(|e| {
-//                 jsonrpc::Error::invalid_params(format!("Failed to parse .task-tree.toml: {}", e))
-//             })
-//         })?;
-//     CONTEXT
-//         .set(Context::new(config, workspace))
-//         .expect("Init should be called only once");
-//     Ok(())
-// }
-
 #[derive(Debug)]
 pub struct Context {
     config: Config,
@@ -41,10 +42,6 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(config: Config, workspace: PathBuf) -> Self {
-        Context { config, workspace }
-    }
-
     pub fn todo(&self) -> PathBuf {
         self.workspace.join(&self.config.paths.todo)
     }

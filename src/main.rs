@@ -12,6 +12,8 @@ mod tree;
 use tokio::io::{stdin, stdout};
 use tower_lsp::{LspService, Server};
 
+// TODO: Add clap with lsp, chart and init subcommands
+
 #[tokio::main]
 async fn main() {
     let (service, socket) = LspService::new(|client| server::TaskTreeServer::new(client));
