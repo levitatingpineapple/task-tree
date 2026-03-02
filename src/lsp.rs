@@ -6,6 +6,7 @@ use crate::{
 use std::str::FromStr;
 use tower_lsp::{Client, LanguageServer, jsonrpc, lsp_types::*};
 
+const CHART: &str = "tasktree.chart";
 const EXPORT_ICS: &str = "tasktree.export";
 const EXTRACT_COMPLETED: &str = "tasktree.cleanup";
 
@@ -49,7 +50,7 @@ impl LanguageServer for TaskTreeServer {
                     },
                 )),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: [EXPORT_ICS, EXTRACT_COMPLETED]
+                    commands: [CHART, EXPORT_ICS, EXTRACT_COMPLETED]
                         .map(|str| str.to_string())
                         .to_vec(),
                     work_done_progress_options: Default::default(),
@@ -99,12 +100,13 @@ impl LanguageServer for TaskTreeServer {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        if !context::get().enabled(&params.text_document.uri) {
+        let ctx = context::get();
+        if !ctx.enabled(&params.text_document.uri) {
             return;
         };
         if let Ok(file_path) = params.text_document.uri.to_file_path() {
-            if file_path == context::get().todo() {
-                if let Err(err) = export_ics(context::get()).await {
+            if file_path == ctx.todo() {
+                if let Err(err) = export_ics(ctx).await {
                     self.client
                         .show_message(MessageType::ERROR, format!("🌳 {}", err))
                         .await;
@@ -121,9 +123,13 @@ impl LanguageServer for TaskTreeServer {
         &self,
         params: ExecuteCommandParams,
     ) -> jsonrpc::Result<Option<serde_json::Value>> {
+        let ctx = context::get();
         match params.command.as_str() {
+            CHART => {
+                crate::chart::run_chart(&ctx.todo());
+            }
             EXPORT_ICS => {
-                if let Err(err) = export_ics(context::get()).await {
+                if let Err(err) = export_ics(ctx).await {
                     self.client
                         .show_message(MessageType::ERROR, format!("🌳 {}", err))
                         .await;
@@ -134,7 +140,7 @@ impl LanguageServer for TaskTreeServer {
                 }
             }
             EXTRACT_COMPLETED => {
-                if let Err(err) = extract_completed(context::get()) {
+                if let Err(err) = extract_completed(ctx) {
                     self.client
                         .show_message(MessageType::ERROR, format!("{}", err))
                         .await;

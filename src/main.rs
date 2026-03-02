@@ -2,20 +2,37 @@ mod chart;
 mod commands;
 mod context;
 mod group;
+mod lsp;
 mod ranged_err;
-mod server;
 mod session;
 mod task;
 mod tasktree;
 mod tree;
 
+use clap::Parser;
+use std::path::PathBuf;
 use tokio::io::{stdin, stdout};
 use tower_lsp::{LspService, Server};
 
-// TODO: Add clap with lsp, chart and init subcommands
+#[derive(Parser)]
+#[command(author, version, about)]
+enum Arguments {
+    Init,
+    Lsp,
+    Chart { path: PathBuf },
+}
 
 #[tokio::main]
 async fn main() {
-    let (service, socket) = LspService::new(|client| server::TaskTreeServer::new(client));
-    Server::new(stdin(), stdout(), socket).serve(service).await;
+    match Arguments::parse() {
+        Arguments::Lsp => {
+            let (service, socket) = LspService::new(|client| lsp::TaskTreeServer::new(client));
+            Server::new(stdin(), stdout(), socket).serve(service).await;
+        }
+        Arguments::Chart { path } => {
+            context::set(&path).unwrap();
+            chart::run_chart(&context::get().todo());
+        }
+        Arguments::Init => todo!("Implement init in current folder"),
+    }
 }

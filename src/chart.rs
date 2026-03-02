@@ -28,7 +28,7 @@ fn show(chart: Chart) -> eframe::Result {
     )
 }
 
-pub fn show_plot(ui: &mut Ui, bars: &HashMap<String, Vec<TimeDelta>>) -> Response {
+fn show_plot(ui: &mut Ui, bars: &HashMap<String, Vec<TimeDelta>>) -> Response {
     let mut sorted_keys: Vec<_> = bars.keys().collect();
     sorted_keys.sort();
 
@@ -67,7 +67,7 @@ pub fn show_plot(ui: &mut Ui, bars: &HashMap<String, Vec<TimeDelta>>) -> Respons
         .response
 }
 
-// pub use demo::run_chart;
+pub use demo::run_chart;
 
 mod demo {
     use super::*;
@@ -77,10 +77,10 @@ mod demo {
         session::{Span, first_time},
         tasktree::{TaskTree, TotalTime},
     };
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, path::Path, str::FromStr};
 
-    pub fn run_chart() {
-        let md = std::fs::read_to_string("/home/user/sync/notes/plan/todo.md").unwrap();
+    pub fn run_chart(path: &Path) {
+        let md = std::fs::read_to_string(path).unwrap();
         let tasktree = TaskTree::from_str(&md).unwrap();
         let start = NaiveDate::from_ymd_opt(2026, 02, 1).unwrap();
         let days: Vec<NaiveDate> = start.iter_days().take(20).collect();
