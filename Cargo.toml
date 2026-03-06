@@ -4,13 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+axum = "0.8.8"
 chrono = "0.4.43"
 chrono-tz = { version = "0.10.4", features = ["serde"] }
 clap = { version = "4.5.60", features = ["derive"] }
 dirs = "6.0.0"
-eframe = "0.33.3"
-egui_extras = { version = "*", features = ["chrono"] }
-egui_plot = "0.34.1"
 ics = "0.5.8"
 indoc = "2.0.7"
 markdown = "1.0.0"
@@ -24,5 +22,6 @@ serial_test = "3.4.0"
 thiserror = "2.0.18"
 tokio = { version = "1.49", features = ["full"] }
 toml = "0.9.12"
+tower-http = { version = "0.6.8", features = ["cors"] }
 tower-lsp = "0.20.0"
 tree-ds = "0.1.6"

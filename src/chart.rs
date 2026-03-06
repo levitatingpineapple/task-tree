@@ -1,102 +1,125 @@
-#![allow(dead_code)]
-use chrono::TimeDelta;
-use eframe::{
-    App, Frame, NativeOptions,
-    egui::{CentralPanel, Context, Response, Ui},
-    run_native,
+use axum::{Json, Router, extract::Query, routing::get};
+use chrono::{DateTime, Month};
+use chrono_tz::Tz;
+use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
+use std::{fmt::Display, fs::read_to_string, str::FromStr};
+
+use crate::{
+    context,
+    group::Group,
+    session::range::{Range, Span},
+    task::Task,
+    tasktree::{TaskTree, TotalTime},
+    tree::Parent,
 };
-use egui_plot::{Bar, BarChart, Legend, Plot};
-use std::collections::HashMap;
 
-struct Chart {
-    bars: HashMap<String, Vec<TimeDelta>>,
+#[derive(Serialize, Deserialize)]
+pub struct Node {
+    name: String,
+    value: i64,
+    children: Vec<Node>,
 }
 
-impl App for Chart {
-    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
-        CentralPanel::default().show(ctx, |ui| {
-            show_plot(ui, &self.bars);
-        });
-    }
-}
-
-fn show(chart: Chart) -> eframe::Result {
-    run_native(
-        "My App",
-        NativeOptions::default(),
-        Box::new(|_cc| Ok(Box::new(chart))),
-    )
-}
-
-fn show_plot(ui: &mut Ui, bars: &HashMap<String, Vec<TimeDelta>>) -> Response {
-    let mut sorted_keys: Vec<_> = bars.keys().collect();
-    sorted_keys.sort();
-
-    let mut charts: Vec<BarChart> = Vec::new();
-
-    for (index, key) in sorted_keys.iter().enumerate() {
-        let values = &bars[*key];
-        let bar_data: Vec<Bar> = values
+pub fn root_node(task_tree: TaskTree, span: Span<DateTime<Tz>>, name: String) -> Node {
+    Node {
+        name,
+        value: task_tree.time_delta(span).num_minutes(),
+        children: task_tree
+            .groups
             .iter()
-            .enumerate()
-            .map(|(i, &duration)| {
-                let hours = duration.num_hours() as f64;
-                Bar::new(i as f64 + 0.5, hours)
-            })
-            .collect();
-
-        let mut chart = BarChart::new(&format!("chart_{}", index), bar_data)
-            .width(0.6)
-            .name(key.as_str());
-
-        if !charts.is_empty() {
-            let chart_refs: Vec<&BarChart> = charts.iter().collect();
-            chart = chart.stack_on(&chart_refs);
-        }
-
-        charts.push(chart);
+            .map(|group| node_from_group(group, span))
+            .filter(|node| node.value > 0)
+            .collect(),
     }
-
-    Plot::new("Task Time Chart")
-        .legend(Legend::default())
-        .show(ui, |plot_ui| {
-            for chart in charts {
-                plot_ui.bar_chart(chart);
-            }
-        })
-        .response
 }
 
-pub use demo::run_chart;
-
-mod demo {
-    use super::*;
-    use chrono::{NaiveDate, TimeDelta};
-
-    use crate::{
-        session::{Span, first_time},
-        tasktree::{TaskTree, TotalTime},
-    };
-    use std::{collections::HashMap, path::Path, str::FromStr};
-
-    pub fn run_chart(path: &Path) {
-        let md = std::fs::read_to_string(path).unwrap();
-        let tasktree = TaskTree::from_str(&md).unwrap();
-        let start = NaiveDate::from_ymd_opt(2026, 02, 1).unwrap();
-        let days: Vec<NaiveDate> = start.iter_days().take(20).collect();
-        let mut bars = HashMap::<String, Vec<TimeDelta>>::new();
-        days.windows(2).for_each(|window| {
-            let start = first_time(window.first().unwrap());
-            let end = first_time(window.last().unwrap());
-            let span = Span::new(start, end);
-            tasktree.groups.iter().for_each(|group_item| {
-                let key = group_item.text.clone();
-                let value = group_item.time_delta(span);
-                // if value > TimeDelta::zero() {
-                bars.entry(key).or_insert_with(Vec::new).push(value);
-                // }
-            })
-        });
-        show(Chart { bars }).unwrap();
+fn node_from_group(group: &Group, span: Span<DateTime<Tz>>) -> Node {
+    let task_nodes = Parent::<Task>::children(group)
+        .iter()
+        .map(|task| node_from_task(task, span));
+    let group_nodes = Parent::<Group>::children(group)
+        .iter()
+        .map(|sub_group| node_from_group(sub_group, span));
+    Node {
+        name: group.text.clone(),
+        value: group.time_delta(span).num_minutes(),
+        children: group_nodes
+            .chain(task_nodes)
+            .filter(|node| node.value > 0)
+            .collect(),
     }
+}
+
+fn node_from_task(task: &Task, span: Span<DateTime<Tz>>) -> Node {
+    Node {
+        name: task.text.clone(),
+        value: task.time_delta(span).num_minutes(),
+        children: Parent::<Task>::children(task)
+            .iter()
+            .map(|task| node_from_task(task, span))
+            .filter(|node| node.value > 0)
+            .collect(),
+    }
+}
+
+pub async fn serve() {
+    let app = Router::<()>::new()
+        .route("/data", get(get_data))
+        .layer(tower_http::cors::CorsLayer::permissive());
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let _ = axum::serve(listener, app).await;
+}
+
+#[derive(Deserialize)]
+// TODO: Add validated version, which implements display for root node name
+struct RawParams {
+    year: i32,
+    month: Option<u8>,
+    week: Option<u8>,
+}
+
+impl RawParams {
+    // TODO: Add error handling
+    fn range(&self) -> Option<Range> {
+        match (self.month, self.week) {
+            (Some(month), None) => Range::month(self.year, month.into()),
+            (None, Some(week)) => Range::week(self.year, week.into()),
+            _ => None,
+        }
+    }
+}
+
+impl Display for RawParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}\n", self.year)?;
+        if let Some(num) = self.month
+            && let Ok(month) = Month::try_from(num)
+        {
+            write!(f, "{}", month.name())?;
+        }
+        if let Some(week) = self.week {
+            write!(f, "Week: {}", week)?;
+        }
+        Ok(())
+    }
+}
+
+async fn get_data(Query(params): Query<RawParams>) -> Result<Json<Node>, (StatusCode, String)> {
+    let markdown = read_to_string(context::get().todo()).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to read file".into(),
+        )
+    })?;
+    let task_tree = TaskTree::from_str(&markdown)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let span = params
+        .range()
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "invalid or missing date range".into(),
+        ))?
+        .into_dt_span();
+    Ok(Json(root_node(task_tree, span, params.to_string())))
 }

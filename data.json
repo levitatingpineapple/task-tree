@@ -1,0 +1,378 @@
+{
+  "name": "Chart",
+  "value": 86,
+  "children": [
+    {
+      "name": "ADHD",
+      "value": 42,
+      "children": [
+        {
+          "name": "Task Tree",
+          "value": 34,
+          "children": [
+            {
+              "name": "Workspace Functions",
+              "value": 0,
+              "children": [
+                {
+                  "name": "iCal export - run on save",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Todo to Done archiving function",
+                  "value": 0,
+                  "children": [
+                    {
+                      "name": "Implement logic",
+                      "value": 0,
+                      "children": [
+                        {
+                          "name": "Add empty trait - empty task",
+                          "value": 0,
+                          "children": []
+                        },
+                        {
+                          "name": "Fix bug: Retain markdown formatting",
+                          "value": 0,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Workspace root and path resolution",
+                      "value": 0,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "Diagnostics",
+              "value": 3,
+              "children": [
+                {
+                  "name": "Add error, when sessions are not ordered by start",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Add duplicate group name error",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Invalid session error/lint",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Children of done must be done",
+                  "value": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Code actions",
+              "value": 2,
+              "children": [
+                {
+                  "name": "Mark as done",
+                  "value": 2,
+                  "children": [
+                    {
+                      "name": "Research approach [[scheduling#Mark as Done]]",
+                      "value": 0,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "name": "Move idea to todo",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Suggestions",
+              "value": 1,
+              "children": [
+                {
+                  "name": "Next open hour in today",
+                  "value": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Charting",
+              "value": 28,
+              "children": [
+                {
+                  "name": "Investigate iced canvas",
+                  "value": 1,
+                  "children": []
+                },
+                {
+                  "name": "Investigate egui",
+                  "value": 3,
+                  "children": []
+                },
+                {
+                  "name": "Build data model",
+                  "value": 10,
+                  "children": [
+                    {
+                      "name": "Session range intersection",
+                      "value": 8,
+                      "children": []
+                    },
+                    {
+                      "name": "Caching and tree depth",
+                      "value": 0,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "name": "Add CLI",
+                  "value": 3,
+                  "children": []
+                },
+                {
+                  "name": "Build JSON model",
+                  "value": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Learn",
+          "value": 0,
+          "children": [
+            {
+              "name": "Watch practice videos",
+              "value": 0,
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "Lab",
+          "value": 8,
+          "children": [
+            {
+              "name": "Music sort",
+              "value": 8,
+              "children": [
+                {
+                  "name": "Add logging + warnings about artwork size",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Mail Sort",
+          "value": 0,
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "Job",
+      "value": 32,
+      "children": [
+        {
+          "name": "Open Source",
+          "value": 14,
+          "children": [
+            {
+              "name": "Ashell",
+              "value": 14,
+              "children": [
+                {
+                  "name": "Audio filters PR",
+                  "value": 1,
+                  "children": []
+                },
+                {
+                  "name": "Open smooth sliders ticket",
+                  "value": 11,
+                  "children": [
+                    {
+                      "name": "Investigate viability",
+                      "value": 10,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "name": "Intro myself",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Audio Icons",
+                  "value": 2,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Investigate Purely Mail (dot separators)",
+          "value": 2,
+          "children": []
+        },
+        {
+          "name": "Setup Asahi",
+          "value": 2,
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "QDP",
+      "value": 12,
+      "children": [
+        {
+          "name": "Shopping",
+          "value": 0,
+          "children": [
+            {
+              "name": "Ali",
+              "value": 0,
+              "children": [
+                {
+                  "name": "Physical light buttons",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "3Phase power meter",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Led wire",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Handyman",
+          "value": 8,
+          "children": [
+            {
+              "name": "Seashell Bathroom",
+              "value": 0,
+              "children": [
+                {
+                  "name": "Silicone glass beam",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Breeze Bathroom",
+              "value": 3,
+              "children": [
+                {
+                  "name": "Swap outlet",
+                  "value": 2,
+                  "children": []
+                },
+                {
+                  "name": "Wire heater power",
+                  "value": 1,
+                  "children": []
+                },
+                {
+                  "name": "Re-mount soap dispenser",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Office Bathroom",
+              "value": 1,
+              "children": [
+                {
+                  "name": "Change Tap",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Install doors",
+                  "value": 1,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Yellow Bathroom",
+              "value": 0,
+              "children": [
+                {
+                  "name": "Assemble Mirror",
+                  "value": 0,
+                  "children": []
+                },
+                {
+                  "name": "Install Doorstop",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Hallway lights",
+              "value": 1,
+              "children": [
+                {
+                  "name": "Finishing touches + direct wiring",
+                  "value": 0,
+                  "children": []
+                }
+              ]
+            },
+            {
+              "name": "Build bunker door",
+              "value": 0,
+              "children": []
+            },
+            {
+              "name": "2nd room sockets",
+              "value": 1,
+              "children": []
+            },
+            {
+              "name": "Mount fireplace cover",
+              "value": 2,
+              "children": []
+            },
+            {
+              "name": "Organize garage + bricks",
+              "value": 0,
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

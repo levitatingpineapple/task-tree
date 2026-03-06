@@ -4,7 +4,7 @@ use chrono::{DateTime, TimeDelta};
 use chrono_tz::Tz;
 
 use crate::{
-    session::Span,
+    session::range::Span,
     task::Task,
     tasktree::TotalTime,
     tree::{Child, Parent},
@@ -98,9 +98,12 @@ impl Parent<Task> for Group {
 
 impl TotalTime for Group {
     fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta {
-        let sub_groups = Parent::<Group>::iter(self).fold(TimeDelta::zero(), |time, group_item| {
-            time + group_item.child.time_delta(span)
-        });
+        let sub_groups = self
+            .sub_groups
+            .iter()
+            .fold(TimeDelta::zero(), |time, sub_group| {
+                time + sub_group.time_delta(span)
+            });
         let tasks = self
             .tasks
             .iter()

@@ -1,6 +1,6 @@
 use chrono::{
-    DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeDelta, Timelike,
-    offset::LocalResult,
+    DateTime, Datelike, Days, Months, NaiveDate, NaiveDateTime, NaiveTime, ParseError, TimeDelta,
+    Timelike, Weekday, offset::LocalResult,
 };
 use chrono_tz::{GapInfo, Tz};
 use std::{
@@ -32,6 +32,31 @@ impl Range {
 
     pub fn time_delta(&self) -> TimeDelta {
         self.end().dt() - self.start().dt()
+    }
+
+    pub fn month(year: i32, month: u32) -> Option<Range> {
+        NaiveDate::from_ymd_opt(year, month, 1).map(|start| {
+            let end = start
+                .checked_add_months(Months::new(1))
+                .expect("adding single month to valid date never overflows");
+            Range::AllDay(Span::new(start, end))
+        })
+    }
+
+    pub fn week(year: i32, week: u32) -> Option<Range> {
+        NaiveDate::from_isoywd_opt(year, week, Weekday::Mon).map(|start| {
+            let end = start
+                .checked_add_days(Days::new(7))
+                .expect("adding seven days to valid date never overflows");
+            Range::AllDay(Span::new(start, end))
+        })
+    }
+
+    pub fn into_dt_span(self) -> Span<DateTime<Tz>> {
+        match self {
+            Range::AllDay(span) => Span::new(first_time(&span.start), first_time(&span.end)),
+            Range::Timed(span) => span,
+        }
     }
 }
 
@@ -352,5 +377,11 @@ mod tests {
             overlay("toolong", "short", Align::Leading),
             Err(RangeErr::TooLong)
         );
+    }
+
+    #[test]
+    fn span_month() {
+        let sm = Span::<DateTime<Tz>>::month(2025, 12);
+        dbg!(sm);
     }
 }

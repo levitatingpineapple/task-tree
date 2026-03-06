@@ -6,7 +6,7 @@ use std::{
 use crate::{
     group::Group,
     ranged_err::{Ranged, ranged},
-    session::{Session, Span},
+    session::{Session, range::Span},
     task::{Task, TaskErr},
     tree::{Child, IteratorItem, Parent},
 };
@@ -116,6 +116,14 @@ impl TaskTree {
 /// A type, which occupies an amount of time in a given time range
 pub trait TotalTime {
     fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta;
+}
+
+impl TotalTime for TaskTree {
+    fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta {
+        self.groups.iter().fold(TimeDelta::zero(), |time, group| {
+            time + group.time_delta(span)
+        })
+    }
 }
 
 impl Display for TaskTree {

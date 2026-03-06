@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-mod range;
+pub mod range;
 mod repeat;
 
 use chrono::{DateTime, Duration, TimeDelta, TimeZone, Timelike, Utc};
@@ -12,9 +12,10 @@ use range::{Range, RangeErr};
 use repeat::{Repeat, RepeatErr};
 use std::{fmt::Display, ops::Add, str::FromStr};
 
-use crate::{session::repeat::rrule_tz, tasktree::TotalTime};
-
-pub use range::{Span, first_time};
+use crate::{
+    session::{range::Span, repeat::rrule_tz},
+    tasktree::TotalTime,
+};
 
 #[derive(Debug, PartialEq)]
 pub struct Session {

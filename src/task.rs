@@ -1,6 +1,6 @@
 use crate::{
     ranged_err::{Ranged, ranged},
-    session::{Session, SessionErr, Span},
+    session::{Session, SessionErr, range::Span},
     tasktree::TotalTime,
     tree::{Child, Parent},
 };
@@ -104,9 +104,12 @@ impl Task {
 
 impl TotalTime for Task {
     fn time_delta(&self, span: Span<DateTime<Tz>>) -> TimeDelta {
-        let sub_tasks = Parent::<Task>::iter(self).fold(TimeDelta::zero(), |time, task_item| {
-            time + task_item.child.time_delta(span)
-        });
+        let sub_tasks = self
+            .sub_tasks
+            .iter()
+            .fold(TimeDelta::zero(), |time, sub_task| {
+                time + sub_task.time_delta(span)
+            });
         let sessions = self
             .sessions
             .iter()

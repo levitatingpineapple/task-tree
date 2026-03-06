@@ -31,7 +31,7 @@ async fn main() {
         }
         Arguments::Chart { path } => {
             context::set(&path).unwrap();
-            chart::run_chart(&context::get().todo());
+            chart::serve().await;
         }
         Arguments::Init => todo!("Implement init in current folder"),
     }
