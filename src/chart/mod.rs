@@ -1,10 +1,9 @@
-use axum::{Json, Router, extract::Query, routing::get};
+use axum::{Json, Router, extract::Query, response::Html, routing::get};
 use chrono::{DateTime, Month};
 use chrono_tz::Tz;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, fs::read_to_string, str::FromStr};
-use tower_http::services::ServeFile;
 
 use crate::{
     context,
@@ -69,12 +68,7 @@ fn node_from_task(task: &Task, span: Span<DateTime<Tz>>) -> Node {
 // TODO: Add error handling
 pub async fn serve() {
     let app = Router::<()>::new()
-        .route_service(
-            "/",
-            ServeFile::new(
-                "/home/user/repo/levitatingpineapple/task-tree/src/chart/web/index.html",
-            ),
-        )
+        .route("/", get(|| async { Html(include_str!("web/index.html")) }))
         .route("/data", get(get_data));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
