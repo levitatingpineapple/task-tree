@@ -126,7 +126,7 @@ impl LanguageServer for TaskTreeServer {
         let ctx = context::get();
         match params.command.as_str() {
             CHART => {
-                todo!("start axum chart server");
+                tokio::spawn(crate::chart::serve());
             }
             EXPORT_ICS => {
                 if let Err(err) = export_ics(ctx).await {

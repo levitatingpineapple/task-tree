@@ -67,14 +67,21 @@ fn node_from_task(task: &Task, span: Span<DateTime<Tz>>) -> Node {
 
 // TODO: Add error handling
 pub async fn serve() {
-    let app = Router::<()>::new()
-        .route("/", get(|| async { Html(include_str!("web/index.html")) }))
-        .route("/data", get(get_data));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
+    // Try to aquire port
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await;
+    //
     open::that_in_background("http://127.0.0.1:3000");
-    let _result = axum::serve(listener, app).await;
+    match listener {
+        Ok(listener) => {
+            let app = Router::<()>::new()
+                .route("/", get(|| async { Html(include_str!("web/index.html")) }))
+                .route("/data", get(get_data));
+            let _result = axum::serve(listener, app).await;
+        }
+        Err(err) => {
+            dbg!(err);
+        }
+    }
 }
 
 #[derive(Deserialize)]
