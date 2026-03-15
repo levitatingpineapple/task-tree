@@ -71,22 +71,23 @@ pub trait Parent<C: Child>: Sized {
         }
     }
 
+    /// Depth first mutable traversal
     fn for_each_mut<A>(&mut self, action: &mut A)
     where
         A: FnMut(&mut C, &Vec<C::Id>),
     {
-        self.for_each_mut_internal(&mut vec![], action);
+        self.for_each_mut_recursive(&mut vec![], action);
     }
 
     #[doc(hidden)]
-    fn for_each_mut_internal<A>(&mut self, path: &mut Vec<C::Id>, action: &mut A)
+    fn for_each_mut_recursive<A>(&mut self, path: &mut Vec<C::Id>, action: &mut A)
     where
         A: FnMut(&mut C, &Vec<C::Id>),
     {
         self.children_mut().iter_mut().for_each(|child| {
             action(child, &path);
             path.push(child.id());
-            child.for_each_mut_internal(path, action);
+            child.for_each_mut_recursive(path, action);
             path.pop();
         })
     }

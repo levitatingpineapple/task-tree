@@ -79,13 +79,15 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     Ok(())
 }
 
-/// Moves all completed tasks to `todo.md`
+/// Moves all completed tasks from `todo.md` to `done.md`
 pub fn extract_completed(context: &Context) -> Result<(), ExportErr> {
     let todo_path = context.todo();
     let done_path = context.done();
     let mut todo = TaskTree::from_str(&read_to_string(&todo_path)?)?;
     let mut done = TaskTree::from_str(&read_to_string(&done_path)?)?;
-    todo.extract_completed_tasks(&mut |context| done.insert_task(context));
+    todo.pluck_tasks(&|task| task.done == Some(true), &mut |context| {
+        done.insert_task(context)
+    });
     todo.remove_empty_groups();
     done.remove_empty_groups();
     done.for_each_mut(&mut |mut group, _| {

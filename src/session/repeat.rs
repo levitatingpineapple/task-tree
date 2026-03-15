@@ -43,11 +43,13 @@ impl Repeat {
         }
         // Decode until
         if let Some(until_str) = parts.next() {
-            rule = rule.until(rrule_tz(Bound::from_str(until_str)?.dt()));
+            let ut = rrule_utc(Bound::from_str(until_str)?.dt());
+            dbg!(ut);
+            rule = rule.until(ut);
         }
         // TODO: Also validate that repeat interval is larger than `range.time_delta` which the library does not do...
         Ok(Repeat {
-            rule: rule.validate(rrule_tz(range.start().dt()))?,
+            rule: rule.validate(rrule_utc(range.start().dt()))?,
         })
     }
 }
@@ -110,8 +112,8 @@ fn from_str(str: &str) -> Option<Weekday> {
     }
 }
 
-pub fn rrule_tz(dt: DateTime<Tz>) -> DateTime<rrule::Tz> {
-    dt.with_timezone(&dt.timezone().into())
+pub fn rrule_utc(dt: DateTime<Tz>) -> DateTime<rrule::Tz> {
+    dt.with_timezone(&rrule::Tz::UTC)
 }
 
 #[derive(Debug, PartialEq, thiserror::Error)]

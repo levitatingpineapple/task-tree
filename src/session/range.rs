@@ -378,10 +378,4 @@ mod tests {
             Err(RangeErr::TooLong)
         );
     }
-
-    #[test]
-    fn span_month() {
-        let sm = Span::<DateTime<Tz>>::month(2025, 12);
-        dbg!(sm);
-    }
 }

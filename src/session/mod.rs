@@ -9,13 +9,10 @@ use ics::{
     properties::{DtEnd, DtStart},
 };
 use range::{Range, RangeErr};
-use repeat::{Repeat, RepeatErr};
+use repeat::{Repeat, RepeatErr, rrule_utc};
 use std::{fmt::Display, ops::Add, str::FromStr};
 
-use crate::{
-    session::{range::Span, repeat::rrule_tz},
-    tasktree::TotalTime,
-};
+use crate::{session::range::Span, tasktree::TotalTime};
 
 #[derive(Debug, PartialEq)]
 pub struct Session {
@@ -68,20 +65,20 @@ impl TotalTime for Session {
         let repeats = if let Some(repeat) = &self.repeat {
             // It should be fine to call unchecked, since bounds are added
             // set includes the initial session
-            rrule::RRuleSet::new(rrule_tz(self.range.start().dt()))
+            rrule::RRuleSet::new(rrule_utc(self.range.start().dt()))
                 .rrule(repeat.rule.clone())
-                .after(rrule_tz(span.start - time_delta))
-                .before(rrule_tz(span.end))
+                .after(rrule_utc(span.start - time_delta))
+                .before(rrule_utc(span.end))
                 // NOTE: `rrule` lib will skip repeats, which can't be resolved in a given timezone
                 .all_unchecked()
         } else {
-            vec![rrule_tz(self.range.start().dt())]
+            vec![rrule_utc(self.range.start().dt())]
         };
         repeats
             .into_iter()
             .map(|repeat| {
-                let start = rrule_tz(span.start).max(repeat);
-                let end = rrule_tz(span.end).min(repeat + time_delta);
+                let start = rrule_utc(span.start).max(repeat);
+                let end = rrule_utc(span.end).min(repeat + time_delta);
                 (end - start).max(TimeDelta::zero())
             })
             .fold(TimeDelta::zero(), TimeDelta::add)

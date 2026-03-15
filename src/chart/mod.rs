@@ -4,6 +4,7 @@ use chrono_tz::Tz;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, fs::read_to_string, str::FromStr};
+use tower_http::services::ServeFile;
 
 use crate::{
     context,
@@ -34,6 +35,7 @@ pub fn root_node(task_tree: TaskTree, span: Span<DateTime<Tz>>, name: String) ->
     }
 }
 
+// TODO: Add dynamic programming
 fn node_from_group(group: &Group, span: Span<DateTime<Tz>>) -> Node {
     let task_nodes = Parent::<Task>::children(group)
         .iter()
@@ -51,6 +53,7 @@ fn node_from_group(group: &Group, span: Span<DateTime<Tz>>) -> Node {
     }
 }
 
+// TODO: Add dynamic programming
 fn node_from_task(task: &Task, span: Span<DateTime<Tz>>) -> Node {
     Node {
         name: task.text.clone(),
@@ -63,12 +66,21 @@ fn node_from_task(task: &Task, span: Span<DateTime<Tz>>) -> Node {
     }
 }
 
+// TODO: Add error handling
 pub async fn serve() {
     let app = Router::<()>::new()
-        .route("/data", get(get_data))
-        .layer(tower_http::cors::CorsLayer::permissive());
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    let _ = axum::serve(listener, app).await;
+        .route_service(
+            "/",
+            ServeFile::new(
+                "/home/user/repo/levitatingpineapple/task-tree/src/chart/web/index.html",
+            ),
+        )
+        .route("/data", get(get_data));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    open::that_in_background("http://127.0.0.1:3000");
+    let _result = axum::serve(listener, app).await;
 }
 
 #[derive(Deserialize)]
@@ -106,13 +118,21 @@ impl Display for RawParams {
 }
 
 async fn get_data(Query(params): Query<RawParams>) -> Result<Json<Node>, (StatusCode, String)> {
-    let markdown = read_to_string(context::get().todo()).map_err(|_| {
+    let todo = read_to_string(context::get().todo()).map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "failed to read file".into(),
         )
     })?;
-    let task_tree = TaskTree::from_str(&markdown)
+    let todo_tree = TaskTree::from_str(&todo)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let done = read_to_string(context::get().done()).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to read file".into(),
+        )
+    })?;
+    let done_tree = TaskTree::from_str(&done)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let span = params
         .range()
@@ -121,5 +141,6 @@ async fn get_data(Query(params): Query<RawParams>) -> Result<Json<Node>, (Status
             "invalid or missing date range".into(),
         ))?
         .into_dt_span();
-    Ok(Json(root_node(task_tree, span, params.to_string())))
+    let union = done_tree.union(todo_tree);
+    Ok(Json(root_node(union, span, params.to_string())))
 }

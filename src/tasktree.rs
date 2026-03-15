@@ -67,11 +67,12 @@ impl TaskTree {
             .insert(t.task_path, t.task);
     }
 
-    /// Plucks completed tasks from the tree
+    /// Plucks filtered tasks from the tree
     /// and returns them in the `action` callback
-    pub fn extract_completed_tasks<F>(&mut self, action: &mut F)
+    pub fn pluck_tasks<F, A>(&mut self, filter: &F, action: &mut A)
     where
-        F: FnMut(MoveContext),
+        A: FnMut(MoveContext),
+        F: Fn(&mut Task) -> bool,
     {
         self.for_each_mut(&mut |group, group_path| {
             let group_id = group.id();
@@ -86,9 +87,15 @@ impl TaskTree {
                         task,
                     });
                 },
-                &|task| task.done == Some(true),
+                filter,
             );
         });
+    }
+
+    /// Drains the other task-tree from all tasks and inserts then into self
+    pub fn union(mut self, mut other: TaskTree) -> TaskTree {
+        other.pluck_tasks(&|_| true, &mut |ctx| self.insert_task(ctx));
+        self
     }
 
     /// Removes groups without any tasks or subgroups
