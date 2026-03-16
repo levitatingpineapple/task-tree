@@ -103,6 +103,7 @@ pub trait Parent<C: Child>: Sized {
         for child in self.children_mut() {
             path.push(child.id());
             child.extract_if(path, action, filter);
+            path.pop();
         }
     }
 }

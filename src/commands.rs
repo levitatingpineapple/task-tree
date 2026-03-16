@@ -85,7 +85,15 @@ pub fn extract_completed(context: &Context) -> Result<(), ExportErr> {
     let done_path = context.done();
     let mut todo = TaskTree::from_str(&read_to_string(&todo_path)?)?;
     let mut done = TaskTree::from_str(&read_to_string(&done_path)?)?;
+    _extract_completed(&mut todo, &mut done);
+    std::fs::write(&todo_path, todo.to_string()).unwrap();
+    std::fs::write(&done_path, done.to_string()).unwrap();
+    Ok(())
+}
+
+fn _extract_completed(todo: &mut TaskTree, done: &mut TaskTree) {
     todo.pluck_tasks(&|task| task.done == Some(true), &mut |context| {
+        dbg!(&context.task_path, &context.task.text);
         done.insert_task(context)
     });
     todo.remove_empty_groups();
@@ -93,9 +101,6 @@ pub fn extract_completed(context: &Context) -> Result<(), ExportErr> {
     done.for_each_mut(&mut |mut group, _| {
         <Group as Parent<Task>>::for_each_mut(&mut group, &mut |task, _| task.done = None);
     });
-    std::fs::write(&todo_path, todo.to_string()).unwrap();
-    std::fs::write(&done_path, done.to_string()).unwrap();
-    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -108,4 +113,47 @@ pub enum ExportErr {
     Reqwest(#[from] reqwest::Error),
     #[error("CalDAV error: {0}")]
     CalDAV(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tasktree::TaskTree;
+    use indoc::indoc;
+    use std::str::FromStr;
+
+    #[test]
+    fn extract_completed() {
+        let todo_str = indoc! {"
+            # Task Tree
+            
+            - [ ] Workspace Functions
+              - [x] iCal export - run on save
+              - [x] Todo to Done archiving function
+            - [ ] Diagnostics `26/02/13_20-21` `26/02/14_12-13`
+              - [x] Children of done must be done `26/02/14_18-19`
+        "};
+        let mut todo = TaskTree::from_str(todo_str).unwrap();
+        let mut done = TaskTree::from_str("").unwrap();
+        _extract_completed(&mut todo, &mut done);
+        let done_str = indoc! {"
+            # Task Tree
+            
+            - Workspace Functions
+              - iCal export - run on save
+              - Todo to Done archiving function
+            - Diagnostics
+              - Children of done must be done `26/02/14_18-19`
+        "};
+
+        assert_eq!(&done.to_string(), done_str);
+    }
+
+    // #[test]
+    // fn foo() {
+    //     let string = read_to_string("/home/user/sync/notes/plan/todo.md").unwrap();
+    //     let todo = TaskTree::from_str(&string).unwrap();
+
+    //     print!("{}", todo.to_string());
+    // }
 }

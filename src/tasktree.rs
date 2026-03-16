@@ -135,8 +135,11 @@ impl TotalTime for TaskTree {
 
 impl Display for TaskTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for group in &self.groups {
-            write!(f, "{}", group)?
+        for (i, group) in self.groups.iter().enumerate() {
+            write!(f, "{}", group)?;
+            if i < self.groups.len() - 1 {
+                writeln!(f)?;
+            }
         }
         Ok(())
     }

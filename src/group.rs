@@ -20,15 +20,18 @@ pub struct Group {
 impl Group {
     fn fmt_recursive(&self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         if level > 0 {
-            write!(f, "{} {}\n\n", "#".repeat(level), self.text)?;
+            write!(f, "{} {}\n", "#".repeat(level), self.text)?;
         }
-        for task in &self.tasks {
-            write!(f, "{}", task)?;
-        }
+
         if !&self.tasks.is_empty() {
             write!(f, "\n")?;
+            for task in &self.tasks {
+                write!(f, "{}", task)?;
+            }
         }
+
         for child in &self.sub_groups {
+            write!(f, "\n")?;
             child.fmt_recursive(f, level + 1)?;
         }
         Ok(())
