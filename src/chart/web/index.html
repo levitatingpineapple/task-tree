@@ -120,7 +120,7 @@
             .style("cursor", "pointer")
             .on("click", clicked);
 
-        const format = d3.format(",d");
+        const format = (mins) => `${Math.floor(mins / 60)}h${mins % 60}m`;
         const tooltip = d3.select("#tooltip");
 
         path.on("mouseover", function(event, d) {
