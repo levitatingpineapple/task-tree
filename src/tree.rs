@@ -32,7 +32,7 @@ pub trait Parent<C: Child>: Sized {
         }
     }
 
-    fn get_mut(&mut self, path: Path<C>) -> Option<&mut C> {
+    fn get_mut(&mut self, path: Path<C::Id>) -> Option<&mut C> {
         path.parent_ids
             .into_iter()
             .try_fold(self.children_mut(), |children, parent_id| {
@@ -137,12 +137,12 @@ pub trait Child: Sized + Parent<Self> {
 // MARK: Path access
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Path<C: Child> {
-    pub parent_ids: Vec<C::Id>,
-    pub child_id: C::Id,
+pub struct Path<Id: Clone> {
+    pub parent_ids: Vec<Id>,
+    pub child_id: Id,
 }
 
-impl<'a, C: Child> From<&IteratorItem<'a, C>> for Path<C> {
+impl<'a, C: Child> From<&IteratorItem<'a, C>> for Path<C::Id> {
     fn from(item: &IteratorItem<'a, C>) -> Self {
         Self {
             parent_ids: item.parent_ids.clone(),
@@ -151,11 +151,7 @@ impl<'a, C: Child> From<&IteratorItem<'a, C>> for Path<C> {
     }
 }
 
-impl<C> Display for Path<C>
-where
-    C: Child,
-    C::Id: Display,
-{
+impl<Id: Clone + Display> Display for Path<Id> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for parent_id in self.parent_ids.iter() {
             write!(f, "{parent_id}/")?
@@ -170,12 +166,8 @@ pub enum PathErr<E> {
     InvalidSegment(E),
 }
 
-impl<C> FromStr for Path<C>
-where
-    C: Child,
-    C::Id: FromStr,
-{
-    type Err = PathErr<<C::Id as FromStr>::Err>;
+impl<Id: Clone + FromStr> FromStr for Path<Id> {
+    type Err = PathErr<<Id as FromStr>::Err>;
 
     fn from_str(str: &str) -> Result<Self, Self::Err> {
         if str.is_empty() {

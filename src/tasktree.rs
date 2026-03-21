@@ -164,10 +164,10 @@ pub struct MoveContext<'a> {
     pub task: Task,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TaskPath {
-    pub group: tree::Path<Group>,
-    pub task: tree::Path<Task>,
+    pub group: tree::Path<String>,
+    pub task: tree::Path<String>,
 }
 
 impl Display for TaskPath {

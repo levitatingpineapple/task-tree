@@ -18,8 +18,14 @@ use tower_lsp::{LspService, Server};
 #[command(author, version, about)]
 enum Args {
     Lsp,
-    Chart { path: PathBuf },
+    Chart {
+        path: PathBuf,
+    },
     List,
+    #[command(short_flag = 's')]
+    Start {
+        task: crate::tasktree::TaskPath,
+    },
 }
 
 #[tokio::main]
@@ -38,6 +44,21 @@ async fn main() {
             context::set(&pwd).expect("Valid config");
             commands::print_autocomplete();
         }
+        Args::Start { task } => {
+            let pwd = std::env::current_dir().expect("Valid directory");
+            context::set(&pwd).expect("Valid config");
+            let session_path = context::get().active_session();
+            if session_path.exists() {
+                println!("\x1b[31mSession already active\x1b[0m");
+                return;
+            }
+            let active = active::Active {
+                task,
+                start: chrono::Utc::now().timestamp(),
+            };
+            let toml_str = toml::to_string(&active).expect("Valid toml");
+            std::fs::write(session_path, toml_str).expect("Write to active session file");
+        }
     }
 }
 
@@ -48,9 +69,9 @@ mod active {
 
     #[serde_as]
     #[derive(Serialize, Deserialize)]
-    struct Active {
+    pub struct Active {
         #[serde_as(as = "DisplayFromStr")]
-        task: TaskPath,
-        start: i64,
+        pub task: TaskPath,
+        pub start: i64,
     }
 }

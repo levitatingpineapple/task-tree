@@ -5,7 +5,7 @@ use crate::{
     session,
     task::Task,
     tasktree::{TaskPath, TaskTree, TaskTreeErr},
-    tree::{self, Child, Parent},
+    tree::Parent,
 };
 use chrono::Utc;
 use ics::{

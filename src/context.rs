@@ -42,7 +42,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn active(&self) -> PathBuf {
+    pub fn active_session(&self) -> PathBuf {
         self.workspace.join(".task-tree-session.toml")
     }
 
