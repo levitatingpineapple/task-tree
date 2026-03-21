@@ -4,8 +4,8 @@ use crate::{
     ranged_err::Ranged,
     session,
     task::Task,
-    tasktree::{TaskTree, TaskTreeErr},
-    tree::Parent,
+    tasktree::{TaskPath, TaskTree, TaskTreeErr},
+    tree::{self, Child, Parent},
 };
 use chrono::Utc;
 use ics::{
@@ -77,6 +77,22 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
         }
     }
     Ok(())
+}
+
+pub fn print_autocomplete() {
+    let string = std::fs::read_to_string(crate::context::get().todo()).expect("Present todo file");
+    let tasktree = TaskTree::from_str(&string).expect("Valid tree");
+    for group_item in <TaskTree as Parent<Group>>::iter(&tasktree) {
+        for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
+            println!(
+                "{}",
+                TaskPath {
+                    group: (&group_item).into(),
+                    task: (&task_item).into(),
+                }
+            );
+        }
+    }
 }
 
 /// Moves all completed tasks from `todo.md` to `done.md`

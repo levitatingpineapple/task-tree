@@ -1,3 +1,5 @@
+use core::fmt;
+use std::fmt::{Display, Formatter};
 /// # Two type tree
 ///
 /// ## Implmenentation
@@ -8,6 +10,7 @@
 /// - Task is task child
 use std::hash::{Hash, Hasher};
 use std::slice::Iter;
+use std::str::FromStr;
 
 /// Root of the tree structure parametrized by the type of children it contains
 pub trait Parent<C: Child>: Sized {
@@ -21,11 +24,6 @@ pub trait Parent<C: Child>: Sized {
     // The default impl is empty
     fn move_data_from(&mut self, _: &mut Self) {}
 
-    /// Finds a child, given it's id in O(n) time
-    fn child_mut(&mut self, id: C::Id) -> Option<&mut C> {
-        self.children_mut().iter_mut().find(|c| c.id() == id)
-    }
-
     /// Depth first iterator, which includes full path to the `Child`
     fn iter(&self) -> DepthFirstIterator<'_, C> {
         DepthFirstIterator {
@@ -34,19 +32,36 @@ pub trait Parent<C: Child>: Sized {
         }
     }
 
+    fn get_mut(&mut self, path: Path<C>) -> Option<&mut C> {
+        path.parent_ids
+            .into_iter()
+            .try_fold(self.children_mut(), |children, parent_id| {
+                children
+                    .iter_mut()
+                    .find(|c| c.id() == parent_id)
+                    .map(|c| c.children_mut())
+            })
+            .and_then(|children| children.iter_mut().find(|c| c.id() == path.child_id))
+    }
+
+    /// Finds a child, given it's id in O(n) time (`fn insert` helper)
+    fn _child_mut(&mut self, id: C::Id) -> Option<&mut C> {
+        self.children_mut().iter_mut().find(|c| c.id() == id)
+    }
+
     fn insert(&mut self, path: &[C::Id], child: C) -> &mut C {
         if let Some((parent_id, rest)) = path.split_first() {
             // Add parent if it does not exist
-            if self.child_mut(parent_id.clone()).is_none() {
+            if self._child_mut(parent_id.clone()).is_none() {
                 self.children_mut().push(C::new(parent_id.clone()));
             }
             // Get a reference to the parent, which now must exist
-            self.child_mut(parent_id.clone())
+            self._child_mut(parent_id.clone())
                 .expect("Parent was inserted")
                 .insert(rest, child)
         } else {
             let id = child.id();
-            if let Some(existing) = self.child_mut(child.id()) {
+            if let Some(existing) = self._child_mut(child.id()) {
                 // Make child mutable
                 let mut child = child;
                 existing.move_data_from(&mut child);
@@ -56,7 +71,7 @@ pub trait Parent<C: Child>: Sized {
             } else {
                 self.children_mut().push(child);
             }
-            self.child_mut(id).expect("Child was inserted")
+            self._child_mut(id).expect("Child was inserted")
         }
     }
 
@@ -119,11 +134,76 @@ pub trait Child: Sized + Parent<Self> {
     fn new(id: Self::Id) -> Self;
 }
 
+// MARK: Path access
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Path<C: Child> {
+    pub parent_ids: Vec<C::Id>,
+    pub child_id: C::Id,
+}
+
+impl<'a, C: Child> From<&IteratorItem<'a, C>> for Path<C> {
+    fn from(item: &IteratorItem<'a, C>) -> Self {
+        Self {
+            parent_ids: item.parent_ids.clone(),
+            child_id: item.child.id(),
+        }
+    }
+}
+
+impl<C> Display for Path<C>
+where
+    C: Child,
+    C::Id: Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for parent_id in self.parent_ids.iter() {
+            write!(f, "{parent_id}/")?
+        }
+        write!(f, "{}", self.child_id)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum PathErr<E> {
+    Empty,
+    InvalidSegment(E),
+}
+
+impl<C> FromStr for Path<C>
+where
+    C: Child,
+    C::Id: FromStr,
+{
+    type Err = PathErr<<C::Id as FromStr>::Err>;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        if str.is_empty() {
+            Err(PathErr::Empty)
+        } else {
+            Ok(match str.rsplit_once('/') {
+                Some((parents_str, child_str)) => Path {
+                    parent_ids: parents_str
+                        .split('/')
+                        .map(|p| p.parse().map_err(PathErr::InvalidSegment))
+                        .collect::<Result<_, _>>()?,
+                    child_id: child_str.parse().map_err(PathErr::InvalidSegment)?,
+                },
+                None => Path {
+                    parent_ids: vec![],
+                    child_id: str.parse().map_err(PathErr::InvalidSegment)?,
+                },
+            })
+        }
+    }
+}
+
 // MARK: Depth First Iterator
 
+#[derive(Clone)]
 pub struct IteratorItem<'a, C: Child> {
     pub child: &'a C,
-    pub parent_path: Vec<C::Id>,
+    pub parent_ids: Vec<C::Id>,
 }
 
 impl<'a, C> IteratorItem<'a, C>
@@ -134,7 +214,7 @@ where
     /// Hash which uniquely identifies a child in the tree
     /// even if child's contents change
     pub fn id_hash<H: Hasher>(&self, hasher: &mut H) {
-        for parent_id in self.parent_path.iter() {
+        for parent_id in self.parent_ids.iter() {
             parent_id.hash(hasher);
         }
         self.child.id().hash(hasher);
@@ -155,7 +235,7 @@ impl<'a, C: Child> Iterator for DepthFirstIterator<'a, C> {
                 let item = IteratorItem {
                     child,
                     // TODO: Is this clone really needed? Rc<[C::Id]> maybe?
-                    parent_path: self.parent_path.clone(),
+                    parent_ids: self.parent_path.clone(),
                 };
                 self.parent_path.push(child.id());
                 self.iterator_stack.push(child.children().iter());
@@ -314,11 +394,105 @@ mod tests {
 
     impl fmt::Display for super::IteratorItem<'_, TestChild> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            for parent in self.parent_path.iter() {
+            for parent in self.parent_ids.iter() {
                 write!(f, "{}->", parent)?;
             }
             write!(f, "[{}]", self.child.id)?;
             Ok(())
         }
+    }
+
+    // MARK: Path and get tests
+
+    #[derive(Debug, PartialEq)]
+    struct StringChild {
+        id: String,
+        children: Vec<Self>,
+    }
+
+    impl Child for StringChild {
+        type Id = String;
+
+        fn id(&self) -> Self::Id {
+            self.id.clone()
+        }
+
+        fn new(id: Self::Id) -> Self {
+            Self {
+                id,
+                children: vec![],
+            }
+        }
+    }
+
+    impl Parent<Self> for StringChild {
+        fn children_mut(&mut self) -> &mut Vec<Self> {
+            &mut self.children
+        }
+
+        fn children(&self) -> &Vec<Self> {
+            &self.children
+        }
+
+        fn into_children(self) -> Vec<Self> {
+            self.children
+        }
+    }
+
+    #[test]
+    fn path_from_str() {
+        let path: Path<StringChild> = "a/b/c/d".parse().unwrap();
+        assert_eq!(
+            path.parent_ids,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        assert_eq!(path.child_id, "d".to_string());
+
+        let path_single: Path<StringChild> = "a".parse().unwrap();
+        assert_eq!(path_single.parent_ids, Vec::<String>::new());
+        assert_eq!(path_single.child_id, "a".to_string());
+
+        let path_empty = "".parse::<Path<StringChild>>();
+        assert_eq!(path_empty.unwrap_err(), PathErr::Empty);
+    }
+
+    #[test]
+    fn get_mut_test() {
+        let mut root = test_root();
+
+        let path1 = Path {
+            parent_ids: vec!["1", "1.0"],
+            child_id: "1.0.0",
+        };
+        let c1 = root.get_mut(path1).unwrap();
+        assert_eq!(c1.id(), "1.0.0");
+
+        let path2 = Path {
+            parent_ids: vec![],
+            child_id: "2",
+        };
+        let c2 = root.get_mut(path2).unwrap();
+        assert_eq!(c2.id(), "2");
+
+        let path3 = Path {
+            parent_ids: vec!["1"],
+            child_id: "3",
+        };
+        assert!(root.get_mut(path3).is_none());
+    }
+
+    #[test]
+    fn path_display() {
+        let path = Path::<TestChild> {
+            parent_ids: vec!["a", "b", "c"],
+            child_id: "d",
+        };
+        assert_eq!(format!("{}", path), "a/b/c/d");
+
+        let path_empty = Path::<TestChild> {
+            parent_ids: vec![],
+            child_id: "a",
+        };
+        assert_eq!(format!("{}", path_empty), "a");
     }
 }

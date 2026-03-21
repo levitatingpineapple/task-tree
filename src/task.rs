@@ -141,6 +141,7 @@ impl Parent<Task> for Task {
 
     fn move_data_from(&mut self, other: &mut Task) {
         assert!(self.text == other.text); // Sanity check
+        self.done = other.done;
         self.sessions.extend(other.sessions.drain(..));
     }
 }
