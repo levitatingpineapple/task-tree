@@ -79,7 +79,7 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     Ok(())
 }
 
-pub fn print_autocomplete() {
+pub fn list_task_paths() {
     let string = std::fs::read_to_string(crate::context::get().todo()).expect("Present todo file");
     let tasktree = TaskTree::from_str(&string).expect("Valid tree");
     for group_item in <TaskTree as Parent<Group>>::iter(&tasktree) {

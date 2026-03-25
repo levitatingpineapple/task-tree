@@ -5,7 +5,7 @@ use chrono::{
 use chrono_tz::{GapInfo, Tz};
 use std::{
     fmt::{self, Display, Formatter},
-    ops::RangeInclusive,
+    ops::{RangeInclusive, Sub},
     str::FromStr,
 };
 
@@ -39,7 +39,7 @@ impl Range {
             let end = start
                 .checked_add_months(Months::new(1))
                 .expect("adding single month to valid date never overflows");
-            Range::AllDay(Span::new(start, end))
+            Range::AllDay(Span::new(start, end).expect("Not empty"))
         })
     }
 
@@ -48,13 +48,15 @@ impl Range {
             let end = start
                 .checked_add_days(Days::new(7))
                 .expect("adding seven days to valid date never overflows");
-            Range::AllDay(Span::new(start, end))
+            Range::AllDay(Span::new(start, end).expect("Not empty"))
         })
     }
 
     pub fn into_dt_span(self) -> Span<DateTime<Tz>> {
         match self {
-            Range::AllDay(span) => Span::new(first_time(&span.start), first_time(&span.end)),
+            Range::AllDay(span) => {
+                Span::new(first_time(&span.start), first_time(&span.end)).expect("Not empty")
+            }
             Range::Timed(span) => span,
         }
     }
@@ -73,17 +75,11 @@ impl FromStr for Range {
         )?;
         Ok(match Bound::from_str(start)? {
             Bound::AllDay(nd) => {
-                let span = Span::new(nd, date(end)?);
-                if span.is_empty() {
-                    return Err(RangeErr::Empty);
-                }
+                let span = Span::new(nd, date(end)?)?;
                 Range::AllDay(span)
             }
             Bound::Timed(dt) => {
-                let span = Span::new(dt, date_time(end)?);
-                if span.is_empty() {
-                    return Err(RangeErr::Empty);
-                }
+                let span = Span::new(dt, date_time(end)?)?;
                 Range::Timed(span)
             }
         })
@@ -122,19 +118,34 @@ impl Display for Range {
     }
 }
 
+///
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span<T: PartialEq + Ord + Copy> {
-    pub start: T,
-    pub end: T,
+    start: T,
+    end: T,
 }
 
 impl<T: Ord + Copy> Span<T> {
-    pub fn new(start: T, end: T) -> Span<T> {
-        Span { start, end }
+    pub fn new(start: T, end: T) -> Result<Span<T>, RangeErr> {
+        if end > start {
+            Ok(Span { start, end })
+        } else {
+            Err(RangeErr::Empty)
+        }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.start >= self.end
+    pub fn start(&self) -> T {
+        self.start
+    }
+
+    pub fn end(&self) -> T {
+        self.end
+    }
+}
+
+impl<T: Ord + Copy + Sub> Span<T> {
+    pub fn duration(&self) -> T::Output {
+        self.end - self.start
     }
 }
 
@@ -298,26 +309,26 @@ mod tests {
 
     #[test]
     #[rustfmt::skip]
-    fn range_display() {
+    fn range_display() -> Result<(), RangeErr> {
         test(
             "25/08-09",
-            Range::AllDay(Span::new(d(2025, 8, 1), d(2025, 9, 1)))
+            Range::AllDay(Span::new(d(2025, 8, 1), d(2025, 9, 1))?)
         );
         test(
             "25/01/28-30",
-            Range::AllDay(Span::new(d(2025, 1, 28), d(2025, 1, 30)))
+            Range::AllDay(Span::new(d(2025, 1, 28), d(2025, 1, 30))?)
         );
         test(
             "25-28",
-            Range::AllDay(Span::new(d(2025, 1, 1), d(2028, 1, 1)))
+            Range::AllDay(Span::new(d(2025, 1, 1), d(2028, 1, 1))?)
         );
         test(
             "25/08/01_17-18",
-            Range::Timed(Span::new(dt(2025, 8, 1, 17, 0, 0), dt(2025, 8, 1, 18, 0, 0)))
+            Range::Timed(Span::new(dt(2025, 8, 1, 17, 0, 0), dt(2025, 8, 1, 18, 0, 0))?)
         );
         test(
             "25/03/02_15:45-04/01_11:46",
-            Range::Timed(Span::new(dt(2025, 3, 2, 15, 45, 00), dt(2025, 4, 1, 11, 46, 00)))
+            Range::Timed(Span::new(dt(2025, 3, 2, 15, 45, 00), dt(2025, 4, 1, 11, 46, 00))?)
         );
 
         fn test(str: &str, range: Range) {
@@ -334,12 +345,17 @@ mod tests {
             let time = NaiveTime::from_hms_opt(h, min, s).unwrap();
             in_timezone(&NaiveDateTime::new(date, time)).unwrap()
         }
+
+        Ok(())
     }
 
     #[test]
     fn range_error() {
         test("25/07/08", RangeErr::MissingEndBound);
         test("25/07/08-07", RangeErr::Empty);
+        test("25/07/08-08", RangeErr::Empty);
+        test("25/07/08_14:30-14:30", RangeErr::Empty);
+
         test("25/09/07_00:30-40", RangeErr::InvalidInTimezone);
         test("25/04/05_23:30-40", RangeErr::AmbiguousInTimezone);
 

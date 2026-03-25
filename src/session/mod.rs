@@ -2,7 +2,7 @@
 pub mod range;
 mod repeat;
 
-use chrono::{DateTime, Duration, TimeDelta, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Duration, DurationRound, TimeDelta, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
 use ics::{
     parameters,
@@ -21,16 +21,33 @@ pub struct Session {
 }
 
 impl Session {
+    pub fn from_utc(
+        tz: Tz,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        round_to: Duration,
+    ) -> Result<Session, SessionErr> {
+        Ok(Session {
+            range: Range::Timed(Span::new(
+                start.duration_round(round_to).unwrap().with_timezone(&tz),
+                end.duration_round(round_to).unwrap().with_timezone(&tz),
+            )?),
+            repeat: None,
+        })
+    }
+
+    /// Returns one hour long session,
+    /// starting from the upcomming hour with some offset
     pub fn next_hour(tz: Tz, offset: i64) -> Session {
         let now = chrono::Utc::now().with_timezone(&tz);
         let start = (now + Duration::hours(offset + 1))
             .with_minute(0)
-            .expect("valid minute")
+            .expect("zero is valid minute")
             .with_second(0)
-            .expect("valid second");
+            .expect("zero is valid second");
         let end = start + Duration::hours(1);
         Session {
-            range: Range::Timed(Span::new(start, end)),
+            range: Range::Timed(Span::new(start, end).expect("Not empty")),
             repeat: None,
         }
     }
@@ -38,22 +55,22 @@ impl Session {
     pub fn dt_start<'a>(&self) -> DtStart<'a> {
         match &self.range {
             Range::AllDay(r) => {
-                let mut dt = DtStart::new(r.start.format("%Y%m%d").to_string());
+                let mut dt = DtStart::new(r.start().format("%Y%m%d").to_string());
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            Range::Timed(r) => DtStart::new(ics_format(&r.start)),
+            Range::Timed(r) => DtStart::new(ics_format(&r.start())),
         }
     }
 
     pub fn dt_end<'a>(&self) -> DtEnd<'a> {
         match &self.range {
             Range::AllDay(r) => {
-                let mut dt = DtEnd::new(r.end.format("%Y%m%d").to_string());
+                let mut dt = DtEnd::new(r.end().format("%Y%m%d").to_string());
                 dt.append(parameters!("VALUE" => "DATE"));
                 dt
             }
-            Range::Timed(r) => DtEnd::new(ics_format(&r.end)),
+            Range::Timed(r) => DtEnd::new(ics_format(&r.end())),
         }
     }
 }
@@ -67,8 +84,8 @@ impl TotalTime for Session {
             // set includes the initial session
             rrule::RRuleSet::new(rrule_utc(self.range.start().dt()))
                 .rrule(repeat.rule.clone())
-                .after(rrule_utc(span.start - time_delta))
-                .before(rrule_utc(span.end))
+                .after(rrule_utc(span.start() - time_delta))
+                .before(rrule_utc(span.end()))
                 // NOTE: `rrule` lib will skip repeats, which can't be resolved in a given timezone
                 .all_unchecked()
         } else {
@@ -77,8 +94,8 @@ impl TotalTime for Session {
         repeats
             .into_iter()
             .map(|repeat| {
-                let start = rrule_utc(span.start).max(repeat);
-                let end = rrule_utc(span.end).min(repeat + time_delta);
+                let start = rrule_utc(span.start()).max(repeat);
+                let end = rrule_utc(span.end()).min(repeat + time_delta);
                 (end - start).max(TimeDelta::zero())
             })
             .fold(TimeDelta::zero(), TimeDelta::add)
@@ -158,7 +175,7 @@ mod tests {
 
         fn test(session: &str, range: &str, time_delta: TimeDelta) -> Result<(), SessionErr> {
             let range = Range::from_str(range)?;
-            let span = Span::new(range.start().dt(), range.end().dt());
+            let span = Span::new(range.start().dt(), range.end().dt())?;
             println!("{:?}", span);
             assert_eq!(Session::from_str(session)?.time_delta(span), time_delta);
             Ok(())

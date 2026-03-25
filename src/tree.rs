@@ -322,7 +322,7 @@ mod tests {
         }
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     struct TestChild {
         id: &'static str,
         children: Vec<Self>,
@@ -394,57 +394,20 @@ mod tests {
         }
     }
 
-    // MARK: Path and get tests
-
-    #[derive(Debug, PartialEq)]
-    struct StringChild {
-        id: String,
-        children: Vec<Self>,
-    }
-
-    impl Child for StringChild {
-        type Id = String;
-
-        fn id(&self) -> Self::Id {
-            self.id.clone()
-        }
-
-        fn new(id: Self::Id) -> Self {
-            Self {
-                id,
-                children: vec![],
-            }
-        }
-    }
-
-    impl Parent<Self> for StringChild {
-        fn children_mut(&mut self) -> &mut Vec<Self> {
-            &mut self.children
-        }
-
-        fn children(&self) -> &Vec<Self> {
-            &self.children
-        }
-
-        fn into_children(self) -> Vec<Self> {
-            self.children
-        }
-    }
-
     #[test]
     fn path_from_str() {
-        let path: Path<StringChild> = "a/b/c/d".parse().unwrap();
+        let path: Path<String> = "a/b/c/d".parse().unwrap();
         assert_eq!(
             path.parent_ids,
             vec!["a".to_string(), "b".to_string(), "c".to_string()]
         );
         assert_eq!(path.child_id, "d".to_string());
 
-        let path_single: Path<StringChild> = "a".parse().unwrap();
+        let path_single: Path<String> = "a".parse().unwrap();
         assert_eq!(path_single.parent_ids, Vec::<String>::new());
         assert_eq!(path_single.child_id, "a".to_string());
 
-        let path_empty = "".parse::<Path<StringChild>>();
+        let path_empty = "".parse::<Path<String>>();
         assert_eq!(path_empty.unwrap_err(), PathErr::Empty);
     }
 
@@ -475,15 +438,15 @@ mod tests {
 
     #[test]
     fn path_display() {
-        let path = Path::<TestChild> {
-            parent_ids: vec!["a", "b", "c"],
-            child_id: "d",
+        let path = Path::<String> {
+            parent_ids: vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            child_id: "d".to_string(),
         };
         assert_eq!(format!("{}", path), "a/b/c/d");
 
-        let path_empty = Path::<TestChild> {
+        let path_empty = Path::<String> {
             parent_ids: vec![],
-            child_id: "a",
+            child_id: "a".to_string(),
         };
         assert_eq!(format!("{}", path_empty), "a");
     }
