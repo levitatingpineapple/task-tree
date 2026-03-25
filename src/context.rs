@@ -6,7 +6,7 @@ use tokio::sync::OnceCell;
 static CONTEXT: OnceCell<Context> = OnceCell::const_new();
 
 pub fn set(workspace: &PathBuf) -> Result<(), ContextErr> {
-    let string = read_to_string(workspace.join(".task-tree.toml"))?;
+    let string = read_to_string(workspace.join(".tasktree.toml"))?;
     CONTEXT
         .set(Context {
             config: toml::from_str(&string)?,
@@ -43,7 +43,7 @@ pub struct Context {
 
 impl Context {
     pub fn active_session(&self) -> PathBuf {
-        self.workspace.join(".task-tree-session.toml")
+        self.workspace.join(".tasktree.active.toml")
     }
 
     pub fn todo(&self) -> PathBuf {

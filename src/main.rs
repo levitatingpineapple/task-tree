@@ -117,16 +117,9 @@ async fn main() {
         }
 
         Args::Generate => {
-            generate(
-                Fish,
-                &mut Args::command(),
-                "task-tree",
-                &mut std::io::stdout(),
-            );
+            generate(Fish, &mut Args::command(), "tt", &mut std::io::stdout());
             // Generate dynamic autocomplete for `start` command
-            println!(
-                "complete -c task-tree -n '__fish_seen_subcommand_from start' -a '(task-tree list)'"
-            )
+            println!("complete -c tt -n '__fish_seen_subcommand_from start' -a '(tt list)'")
         }
     }
 }
