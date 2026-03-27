@@ -185,8 +185,11 @@ impl<T> RedExpect<T> for Option<T> {
 }
 
 fn set_context_from_pwd() {
-    let pwd = current_dir().expect("Valid directory");
-    context::set(&pwd).e("No config file in current directory");
+    let workspace = std::env::var("TASK_TREE_DIR")
+        .ok()
+        .map(|ttd| std::path::PathBuf::from(ttd))
+        .unwrap_or(current_dir().e("Valid directory"));
+    context::set(&workspace).e("No config file in directory");
 }
 
 /// Currently active session, stored as toml
