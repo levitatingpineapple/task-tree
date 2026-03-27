@@ -17,7 +17,7 @@ use crate::{
     tree::Parent,
 };
 use chrono::{Duration, TimeZone, Utc};
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{aot::Fish, generate};
 use colored::{Color, Colorize};
 use serde::{Deserialize, Serialize};
@@ -34,92 +34,119 @@ use tower_lsp::{LspService, Server};
 
 #[derive(Parser)]
 #[command(author, version, about)]
-enum Args {
+struct Args {
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+enum Command {
     /// Start the language server
     Lsp,
     /// Open a chart in a browser
     Chart,
+    /// Start an active session now
+    New { task_path: TaskPath },
+    /// End active session
+    End,
+    /// Shell autocompletions
+    Complete {
+        #[command(subcommand)]
+        completions: Completions,
+    },
+}
+
+#[derive(Subcommand)]
+enum Completions {
     /// List task paths
     List,
-    /// Start an active session now
-    Start { task_path: TaskPath },
-    /// Status of current session
-    Status,
-    /// Stop active session
-    Stop,
-    /// Generate fish shell autocompletions
-    Generate,
+    /// Generate completions for fish shell
+    FishGenerate,
 }
 
 #[tokio::main]
 async fn main() {
-    match Args::parse() {
-        Args::Lsp => {
-            let (service, socket) = LspService::new(|client| TaskTreeServer::new(client));
-            Server::new(stdin(), stdout(), socket).serve(service).await;
-        }
-        Args::Chart => {
-            set_context_from_pwd();
-            chart::serve().await;
-        }
-        Args::List => {
-            set_context_from_pwd();
-            commands::list_task_paths();
-        }
-
-        Args::Start { task_path } => {
-            set_context_from_pwd();
-            let session_path = context::get().active_session();
-            if session_path.exists() {
-                red_panic("Session already active!");
+    match Args::parse().command {
+        Some(command) => match command {
+            Command::Lsp => {
+                let (service, socket) = LspService::new(|client| TaskTreeServer::new(client));
+                Server::new(stdin(), stdout(), socket).serve(service).await;
             }
-            let toml_str = toml::to_string(&Active::new(task_path)).expect("Valid toml");
-            fs::write(session_path, toml_str).expect("Write to active session file");
-        }
+            Command::Chart => {
+                set_context_from_pwd();
+                chart::serve().await;
+            }
 
-        Args::Status => {
+            Command::New { task_path } => {
+                set_context_from_pwd();
+                let session_path = context::get().active_session();
+                if session_path.exists() {
+                    red_panic("Session already active!");
+                }
+                let active = Active::new(task_path);
+                let toml_str = toml::to_string(&active).expect("Valid toml");
+                fs::write(session_path, toml_str).expect("Write to active session file");
+                println!("\n{}\n\n{active}", "Started".bright_magenta());
+            }
+
+            Command::End => {
+                set_context_from_pwd();
+                let session_path = context::get().active_session();
+                let toml_str = fs::read_to_string(&session_path).e("Session not active!");
+                let active: Active = toml::from_str(&toml_str).expect("Valid toml");
+                match active.session() {
+                    Some(session) => {
+                        let todo_path = context::get().todo();
+                        let todo_str = &fs::read_to_string(&todo_path).expect("Missing todo file");
+                        let mut tree = TaskTree::from_str(todo_str).expect("Valid tree");
+                        let gp = active.task_path.group.clone();
+                        let group = tree.get_mut(gp).expect("Group exists");
+                        let tp = active.task_path.task.clone();
+                        let task: &mut Task = group.get_mut(tp).expect("Task exists");
+                        task.sessions.push(session);
+                        fs::write(&todo_path, tree.to_string()).expect("Write todo file");
+                        fs::remove_file(&session_path).expect("Remove active session file");
+                        println!("\n{}\n\n{active}", "Stopped:".red());
+                    }
+                    None => {
+                        fs::remove_file(&session_path).expect("Remove active session file");
+                        println!(
+                            "\n{}{}\n\n{active}",
+                            "Discarded ".red(),
+                            "(less than 1m)".white()
+                        );
+                    }
+                };
+            }
+
+            Command::Complete { completions } => match completions {
+                Completions::List => {
+                    set_context_from_pwd();
+                    commands::list_task_paths();
+                }
+                Completions::FishGenerate => {
+                    generate(Fish, &mut Args::command(), "tt", &mut std::io::stdout());
+                    println!(
+                        "complete -c tt -n '__fish_seen_subcommand_from new' -a '(tt complete list)'"
+                    )
+                }
+            },
+        },
+        None => {
             set_context_from_pwd();
             let session_path = context::get().active_session();
             if let Ok(toml_str) = fs::read_to_string(&session_path) {
                 let active: Active = toml::from_str(&toml_str).expect("Valid toml");
-                println!("\n{}\n", "Running:".green());
-                print!("{active}\n");
+                println!("\n{}\n\n{active}", "Running:".green());
             } else {
-                println!("Nothing is running")
+                println!(
+                    "\n{}\n{}{}{}\n",
+                    "Nothing is running!".red(),
+                    "Run ".white(),
+                    "tt help ".yellow(),
+                    "for options.".white()
+                );
             }
-        }
-
-        Args::Stop => {
-            set_context_from_pwd();
-            let session_path = context::get().active_session();
-            let toml_str = fs::read_to_string(&session_path).e("Session not active!");
-            let active: Active = toml::from_str(&toml_str).expect("Valid toml");
-            match active.session() {
-                Some(session) => {
-                    let todo_path = context::get().todo();
-                    let todo_str = &fs::read_to_string(&todo_path).expect("Missing todo file");
-                    let mut tree = TaskTree::from_str(todo_str).expect("Valid tree");
-                    let gp = active.task_path.group.clone();
-                    let group = tree.get_mut(gp).expect("Group exists");
-                    let tp = active.task_path.task.clone();
-                    let task: &mut Task = group.get_mut(tp).expect("Task exists");
-                    task.sessions.push(session);
-                    fs::write(&todo_path, tree.to_string()).expect("Write todo file");
-                    fs::remove_file(&session_path).expect("Remove active session file");
-                    println!("\n{}\n", "Stopped:".red());
-                    print!("{active}\n");
-                }
-                None => {
-                    fs::remove_file(&session_path).expect("Remove active session file");
-                    red_panic("Empty Session")
-                }
-            };
-        }
-
-        Args::Generate => {
-            generate(Fish, &mut Args::command(), "tt", &mut std::io::stdout());
-            // Generate dynamic autocomplete for `start` command
-            println!("complete -c tt -n '__fish_seen_subcommand_from start' -a '(tt list)'")
         }
     }
 }
@@ -192,49 +219,34 @@ impl Active {
 
 impl Display for Active {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "{} {}",
-            "Zone:".white(),
-            self.task_path
-                .group
-                .to_string()
-                .color_char('/', Color::White)
-                .bright_green()
-        )?;
-        writeln!(
-            f,
-            "{} {}",
-            "Task:".white(),
-            self.task_path
-                .task
-                .to_string()
-                .color_char('/', Color::White)
-                .bright_blue()
-        )?;
-        write!(f, "{}", "Sesh: ".white())?;
-        match self.session() {
-            Some(session) => {
-                write!(
-                    f,
-                    "{} ",
-                    session
-                        .to_string()
-                        .color_char('-', Color::Red)
-                        .color_char('_', Color::White)
-                        .color_char(':', Color::White)
-                        .color_char('/', Color::White)
-                        .bright_magenta()
-                )?;
-                writeln!(
-                    f,
-                    "{}",
-                    hours_minutes(session.range.into_dt_span().duration())
-                )?;
-            }
-            None => writeln!(f, "{}", "Empty".red())?,
-        }
-        Ok(())
+        let zone = self
+            .task_path
+            .group
+            .to_string()
+            .color_char('/', Color::White)
+            .bright_green();
+        let task = self
+            .task_path
+            .task
+            .to_string()
+            .color_char('/', Color::White)
+            .bright_blue();
+        let sesh = match self.session() {
+            Some(s) => format!(
+                "{} {}",
+                s.to_string()
+                    .color_char('-', Color::Red)
+                    .color_char('_', Color::White)
+                    .color_char(':', Color::White)
+                    .color_char('/', Color::White)
+                    .bright_magenta(),
+                hours_minutes(s.range.into_dt_span().duration())
+            ),
+            None => "Empty".red().to_string(),
+        };
+        writeln!(f, "{} {zone}", "Zone:".white())?;
+        writeln!(f, "{} {task}", "Task:".white())?;
+        writeln!(f, "{} {sesh}", "Sesh:".white())
     }
 }
 
