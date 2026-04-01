@@ -79,18 +79,20 @@ pub async fn export_ics(context: &Context) -> Result<(), ExportErr> {
     Ok(())
 }
 
-pub fn list_task_paths() {
+pub fn print_incomplete_task_paths() {
     let string = std::fs::read_to_string(crate::context::get().todo()).expect("Present todo file");
     let tasktree = TaskTree::from_str(&string).expect("Valid tree");
     for group_item in <TaskTree as Parent<Group>>::iter(&tasktree) {
         for task_item in <Group as Parent<Task>>::iter(&group_item.child) {
-            println!(
-                "{}",
-                TaskPath {
-                    group: (&group_item).into(),
-                    task: (&task_item).into(),
-                }
-            );
+            if task_item.child.done == Some(false) {
+                println!(
+                    "{}",
+                    TaskPath {
+                        group: (&group_item).into(),
+                        task: (&task_item).into(),
+                    }
+                );
+            }
         }
     }
 }

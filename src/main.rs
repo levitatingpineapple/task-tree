@@ -3,6 +3,7 @@ mod commands;
 mod context;
 mod group;
 mod lsp;
+mod print_color;
 mod ranged_err;
 mod session;
 mod task;
@@ -11,6 +12,7 @@ mod tree;
 
 use crate::{
     lsp::TaskTreeServer,
+    print_color::{StringExt, rounded_box},
     session::Session,
     task::Task,
     tasktree::{TaskPath, TaskTree},
@@ -86,7 +88,15 @@ async fn main() {
                 let active = Active::new(task_path);
                 let toml_str = toml::to_string(&active).expect("Valid toml");
                 fs::write(session_path, toml_str).expect("Write to active session file");
-                println!("\n{}\n\n{active}", "Started".bright_magenta());
+                println!(
+                    "{}",
+                    rounded_box(
+                        "Started",
+                        active,
+                        Some(Color::Magenta),
+                        Some(Color::BrightMagenta),
+                    )
+                );
             }
 
             Command::End => {
@@ -106,14 +116,26 @@ async fn main() {
                         task.sessions.push(session);
                         fs::write(&todo_path, tree.to_string()).expect("Write todo file");
                         fs::remove_file(&session_path).expect("Remove active session file");
-                        println!("\n{}\n\n{active}", "Stopped:".red());
+                        println!(
+                            "{}",
+                            rounded_box(
+                                "Stopped",
+                                active,
+                                Some(Color::Red),
+                                Some(Color::BrightRed)
+                            )
+                        );
                     }
                     None => {
                         fs::remove_file(&session_path).expect("Remove active session file");
                         println!(
-                            "\n{}{}\n\n{active}",
-                            "Discarded ".red(),
-                            "(less than 1m)".white()
+                            "{}",
+                            rounded_box(
+                                "Discarded",
+                                active,
+                                Some(Color::Red),
+                                Some(Color::BrightRed)
+                            )
                         );
                     }
                 };
@@ -122,7 +144,7 @@ async fn main() {
             Command::Complete { completions } => match completions {
                 Completions::List => {
                     set_context_from_pwd();
-                    commands::list_task_paths();
+                    commands::print_incomplete_task_paths();
                 }
                 Completions::FishGenerate => {
                     generate(Fish, &mut Args::command(), "tt", &mut std::io::stdout());
@@ -137,14 +159,29 @@ async fn main() {
             let session_path = context::get().active_session();
             if let Ok(toml_str) = fs::read_to_string(&session_path) {
                 let active: Active = toml::from_str(&toml_str).expect("Valid toml");
-                println!("\n{}\n\n{active}", "Running:".green());
+                println!(
+                    "{}",
+                    rounded_box(
+                        "Running",
+                        active,
+                        Some(Color::Green),
+                        Some(Color::BrightGreen)
+                    )
+                );
             } else {
                 println!(
-                    "\n{}\n{}{}{}\n",
-                    "Nothing is running!".red(),
-                    "Run ".white(),
-                    "tt help ".yellow(),
-                    "for options.".white()
+                    "{}",
+                    rounded_box(
+                        "Nothing is running",
+                        format!(
+                            "{} {} {}",
+                            "Run".white(),
+                            "tt help".yellow(),
+                            "for options.".white()
+                        ),
+                        Some(Color::White),
+                        Some(Color::White)
+                    )
                 );
             }
         }
@@ -268,25 +305,5 @@ fn hours_minutes(duration: Duration) -> String {
         )
     } else {
         format!("{}m", minutes.to_string().red())
-    }
-}
-
-// MARK: Colored characters
-
-pub trait ColoredChar {
-    fn color_char(&self, target: char, color: Color) -> String;
-}
-
-impl ColoredChar for String {
-    fn color_char(&self, target: char, color: Color) -> String {
-        self.chars()
-            .map(|c| {
-                if c == target {
-                    c.to_string().color(color).to_string()
-                } else {
-                    c.to_string()
-                }
-            })
-            .collect()
     }
 }
