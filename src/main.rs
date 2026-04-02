@@ -48,7 +48,7 @@ enum Command {
     /// Open a chart in a browser
     Chart,
     /// Start an active session now
-    New { task_path: TaskPath },
+    Now { task_path: TaskPath },
     /// End active session
     End,
     /// Shell autocompletions
@@ -79,7 +79,7 @@ async fn main() {
                 chart::serve().await;
             }
 
-            Command::New { task_path } => {
+            Command::Now { task_path } => {
                 set_context_from_pwd();
                 let session_path = context::get().active_session();
                 if session_path.exists() {
