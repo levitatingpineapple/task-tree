@@ -149,7 +149,7 @@ async fn main() {
                 Completions::FishGenerate => {
                     generate(Fish, &mut Args::command(), "tt", &mut std::io::stdout());
                     println!(
-                        "complete -c tt -n '__fish_seen_subcommand_from new' -a '(tt complete list)'"
+                        "complete -c tt -n '__fish_seen_subcommand_from now' -a '(tt complete list)'"
                     )
                 }
             },
