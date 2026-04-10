@@ -7,6 +7,7 @@ use crate::{
 use chrono::{DateTime, TimeDelta};
 use chrono_tz::Tz;
 use markdown::mdast::{List, ListItem, Node};
+use mdast_util_to_markdown::{Options, to_markdown_with_options};
 use std::{
     fmt::{self, Display, Formatter},
     str::FromStr,
@@ -48,7 +49,7 @@ impl Task {
                         .map_err(|e| ranged(TaskErr::Session(e), inline_code.position.as_ref()))?,
                 );
             } else {
-                task.text.push_str(&child.to_string());
+                task.text.push_str(&to_md_string(&child));
             }
         }
         // TODO: Handle long task text line-breaks
@@ -177,6 +178,19 @@ pub enum TaskErr {
     Session(#[from] SessionErr),
 }
 
+fn to_md_string(child: &Node) -> String {
+    to_markdown_with_options(
+        &child,
+        &Options {
+            emphasis: '_',
+            ..Default::default()
+        },
+    )
+    .expect("Valid node types")
+    .trim_end_matches("\n")
+    .into()
+}
+
 #[cfg(test)]
 mod tests {
     use markdown::{ParseOptions, to_mdast};
@@ -203,10 +217,13 @@ mod tests {
 
     #[test]
     fn task_new() {
-        let li = list_item("- [ ] My _special_ task `25/03/28_12:30-14:00` `25/02/03_21:45-22:30`");
+        // Keeps markdown formatting and corrects emphasis
+        let li = list_item(
+            "- [ ] My *special* [Link](https://example.com) task `25/03/28_12:30-14:00` `25/02/03_21:45-22:30`",
+        );
         let task = Task {
             done: Some(false),
-            text: "My special task".to_string(),
+            text: "My _special_ [Link](https://example.com) task".to_string(),
             sessions: vec![
                 Session::from_str("25/03/28_12:30-14:00").unwrap(),
                 Session::from_str("25/02/03_21:45-22:30").unwrap(),
