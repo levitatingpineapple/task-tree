@@ -12,9 +12,27 @@ pub struct TaskPath {
     pub task: tree::Path<String>,
 }
 
+fn write_segment(f: &mut Formatter<'_>, s: &str) -> fmt::Result {
+    if s.contains('/') || s.contains(':') {
+        write!(f, "\"{}\"", s)
+    } else {
+        write!(f, "{s}")
+    }
+}
+
+fn write_path(f: &mut Formatter<'_>, path: &tree::Path<String>) -> fmt::Result {
+    for parent in &path.parent_ids {
+        write_segment(f, parent)?;
+        write!(f, "/")?;
+    }
+    write_segment(f, &path.child_id)
+}
+
 impl Display for TaskPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", &self.group, &self.task)
+        write_path(f, &self.group)?;
+        write!(f, ":")?;
+        write_path(f, &self.task)
     }
 }
 
@@ -28,18 +46,55 @@ pub enum TaskPathErr {
     InvalidTask(String),
 }
 
+fn split_unquoted(s: &str, sep: char) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut in_quotes = false;
+    for (i, c) in s.char_indices() {
+        match c {
+            '"' => in_quotes = !in_quotes,
+            c if c == sep && !in_quotes => {
+                parts.push(&s[start..i]);
+                start = i + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
+fn unquote(s: &str) -> String {
+    if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
+        s[1..s.len() - 1].to_string()
+    } else {
+        s.to_string()
+    }
+}
+
+fn parse_path(s: &str) -> Result<tree::Path<String>, String> {
+    if s.is_empty() {
+        return Err("empty path".to_string());
+    }
+    let segments = split_unquoted(s, '/');
+    let (last, parents) = segments.split_last().unwrap();
+    Ok(tree::Path {
+        parent_ids: parents.iter().map(|p| unquote(p)).collect(),
+        child_id: unquote(last),
+    })
+}
+
 impl FromStr for TaskPath {
     type Err = TaskPathErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (group_str, task_str) = s.split_once(':').ok_or(TaskPathErr::MissingSeparator)?;
+        let parts = split_unquoted(s, ':');
+        if parts.len() != 2 {
+            return Err(TaskPathErr::MissingSeparator);
+        }
         Ok(TaskPath {
-            group: group_str
-                .parse()
-                .map_err(|e: tree::PathErr<_>| TaskPathErr::InvalidGroup(format!("{:?}", e)))?,
-            task: task_str
-                .parse()
-                .map_err(|e: tree::PathErr<_>| TaskPathErr::InvalidTask(format!("{:?}", e)))?,
+            group: parse_path(parts[0]).map_err(TaskPathErr::InvalidGroup)?,
+            task: parse_path(parts[1]).map_err(TaskPathErr::InvalidTask)?,
         })
     }
 }
@@ -74,7 +129,7 @@ mod tests {
         };
         let string = tp.to_string();
 
-        assert_eq!(tp.to_string(), string);
+        assert_eq!(string, "group:\"[task](https://task.com)\"");
 
         let decoded = TaskPath::from_str(&string).unwrap();
         assert_eq!(tp, decoded);

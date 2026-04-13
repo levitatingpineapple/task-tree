@@ -1,16 +1,7 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
-/// # Two type tree
-///
-/// ## Implmenentation
-///
-/// - File is group root
-/// - Group is group child
-/// - Group is task root
-/// - Task is task child
 use std::hash::{Hash, Hasher};
 use std::slice::Iter;
-use std::str::FromStr;
 
 /// Root of the tree structure parametrized by the type of children it contains
 pub trait Parent<C: Child>: Sized {
@@ -152,41 +143,12 @@ impl<'a, C: Child> From<&IteratorItem<'a, C>> for Path<C::Id> {
 }
 
 impl<Id: Clone + Display> Display for Path<Id> {
+    /// Just used for ANSI display
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for parent_id in self.parent_ids.iter() {
             write!(f, "{parent_id}/")?
         }
         write!(f, "{}", self.child_id)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum PathErr<E> {
-    Empty,
-    InvalidSegment(E),
-}
-
-impl<Id: Clone + FromStr> FromStr for Path<Id> {
-    type Err = PathErr<<Id as FromStr>::Err>;
-
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        if str.is_empty() {
-            Err(PathErr::Empty)
-        } else {
-            Ok(match str.rsplit_once('/') {
-                Some((parents_str, child_str)) => Path {
-                    parent_ids: parents_str
-                        .split('/')
-                        .map(|p| p.parse().map_err(PathErr::InvalidSegment))
-                        .collect::<Result<_, _>>()?,
-                    child_id: child_str.parse().map_err(PathErr::InvalidSegment)?,
-                },
-                None => Path {
-                    parent_ids: vec![],
-                    child_id: str.parse().map_err(PathErr::InvalidSegment)?,
-                },
-            })
-        }
     }
 }
 
@@ -392,23 +354,6 @@ mod tests {
             write!(f, "[{}]", self.child.id)?;
             Ok(())
         }
-    }
-
-    #[test]
-    fn path_from_str() {
-        let path: Path<String> = "a/b/c/d".parse().unwrap();
-        assert_eq!(
-            path.parent_ids,
-            vec!["a".to_string(), "b".to_string(), "c".to_string()]
-        );
-        assert_eq!(path.child_id, "d".to_string());
-
-        let path_single: Path<String> = "a".parse().unwrap();
-        assert_eq!(path_single.parent_ids, Vec::<String>::new());
-        assert_eq!(path_single.child_id, "a".to_string());
-
-        let path_empty = "".parse::<Path<String>>();
-        assert_eq!(path_empty.unwrap_err(), PathErr::Empty);
     }
 
     #[test]
