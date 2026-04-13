@@ -6,7 +6,7 @@ use std::{
 
 use crate::tree;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TaskPath {
     pub group: tree::Path<String>,
     pub task: tree::Path<String>,
@@ -58,5 +58,25 @@ mod tests {
 
         let err = "group_without_task".parse::<TaskPath>().unwrap_err();
         assert!(matches!(err, TaskPathErr::MissingSeparator));
+    }
+
+    #[test]
+    fn parse_escaped_path() {
+        let tp = TaskPath {
+            group: tree::Path {
+                parent_ids: vec![],
+                child_id: "group".to_string(),
+            },
+            task: tree::Path {
+                parent_ids: vec![],
+                child_id: "[task](https://task.com)".to_string(),
+            },
+        };
+        let string = tp.to_string();
+
+        assert_eq!(tp.to_string(), string);
+
+        let decoded = TaskPath::from_str(&string).unwrap();
+        assert_eq!(tp, decoded);
     }
 }
