@@ -7,6 +7,7 @@ mod print_color;
 mod ranged_err;
 mod session;
 mod task;
+mod taskpath;
 mod tasktree;
 mod tree;
 
@@ -15,7 +16,8 @@ use crate::{
     print_color::{StringExt, rounded_box},
     session::Session,
     task::Task,
-    tasktree::{TaskPath, TaskTree},
+    taskpath::TaskPath,
+    tasktree::TaskTree,
     tree::Parent,
 };
 use chrono::{Duration, TimeZone, Utc};

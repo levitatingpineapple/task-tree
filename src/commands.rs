@@ -4,7 +4,8 @@ use crate::{
     ranged_err::Ranged,
     session,
     task::Task,
-    tasktree::{TaskPath, TaskTree, TaskTreeErr},
+    taskpath::TaskPath,
+    tasktree::{TaskTree, TaskTreeErr},
     tree::Parent,
 };
 use chrono::Utc;
