@@ -49,10 +49,13 @@ impl Task {
                         .map_err(|e| ranged(TaskErr::Session(e), inline_code.position.as_ref()))?,
                 );
             } else {
+                // On new-line the space is missing
+                if task.text.chars().last() != Some(' ') {
+                    task.text.push(' ');
+                }
                 task.text.push_str(&to_md_string(&child));
             }
         }
-        // TODO: Handle long task text line-breaks
         task.text = task.text.trim().to_string();
         // Populate child tasks
         if let Some(second_child) = child_iter.next() {

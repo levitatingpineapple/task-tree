@@ -12,6 +12,7 @@ mod tasktree;
 mod tree;
 
 use crate::{
+    commands::export_ics,
     lsp::TaskTreeServer,
     print_color::{StringExt, rounded_box},
     session::Session,
@@ -50,7 +51,9 @@ enum Command {
     /// Open a chart in a browser
     Chart,
     /// Start an active session now
-    Now { task_path: TaskPath },
+    Now {
+        task_path: TaskPath,
+    },
     /// End active session
     End,
     /// Shell autocompletions
@@ -58,6 +61,7 @@ enum Command {
         #[command(subcommand)]
         completions: Completions,
     },
+    Ics,
 }
 
 #[derive(Subcommand)]
@@ -155,6 +159,11 @@ async fn main() {
                     )
                 }
             },
+
+            Command::Ics => {
+                set_context_from_pwd();
+                export_ics(context::get()).await.unwrap();
+            }
         },
         None => {
             set_context_from_pwd();
