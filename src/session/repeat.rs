@@ -44,7 +44,6 @@ impl Repeat {
         // Decode until
         if let Some(until_str) = parts.next() {
             let ut = rrule_utc(Bound::from_str(until_str)?.dt());
-            dbg!(ut);
             rule = rule.until(ut);
         }
         // TODO: Also validate that repeat interval is larger than `range.time_delta` which the library does not do...
